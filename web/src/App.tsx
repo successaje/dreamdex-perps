@@ -1,4 +1,9 @@
-import { Hoop, rungColour, rungName } from "./components/Hoop";
+import { useState } from "react";
+import { Hoop, rungName } from "./components/Hoop";
+import { ArmForm } from "./components/ArmForm";
+import { WatchScreen } from "./components/WatchScreen";
+import { useMarkets } from "./lib/useMarkets";
+import { useWatch } from "./lib/useWatch";
 import { useWallet } from "./lib/useWallet";
 import { useVenue } from "./lib/useVenue";
 import { DREAMCATCHER, hideki } from "./lib/chain";
@@ -149,46 +154,111 @@ function WalletCta() {
 /* ----------------------------------------------------------------- watching */
 
 function Watching({ account }: { account: `0x${string}` }) {
+  const { markets, loading, error } = useMarkets();
+  const [poolIdx, setPoolIdx] = useState(0);
+  const market = markets[poolIdx] ?? null;
+  const watch = useWatch(account, market?.pool ?? null);
+
   if (!DREAMCATCHER) {
     return (
       <section className="card">
         <h2>Not deployed yet</h2>
         <p className="sub" style={{ marginTop: 8 }}>
-          The contract is written and tested against the live perps contracts, but it is not
-          deployed to {hideki.name} yet. Set <code className="num">VITE_DREAMCATCHER</code> and
+          The contract is written and tested against the live perps contracts, but it has no
+          address on {hideki.name} yet. Set <code className="num">VITE_DREAMCATCHER</code> and
           this screen becomes the watch.
         </p>
         <div className="hoop-wrap" style={{ marginTop: 12 }}>
           <Hoop status={0} cutsMade={0} cutsTotal={0} dormant centre="—" centreLabel="awaiting deploy" />
         </div>
-        <p className="num" style={{ fontSize: 11, color: "var(--subtle)", textAlign: "center" }}>
-          {account.slice(0, 10)}…{account.slice(-6)}
-        </p>
       </section>
     );
   }
-  return <Live />;
+
+  if (loading) return <section className="card"><p className="empty">Reading markets…</p></section>;
+  if (error) return <section className="card"><p className="sub" style={{ color: "var(--sell)" }}>{error}</p></section>;
+  if (!market) return <section className="card"><p className="empty">No perp markets found.</p></section>;
+
+  return (
+    <>
+      <section className="card" style={{ paddingTop: 14, paddingBottom: 14 }}>
+        <div className="field" style={{ marginTop: 0 }}>
+          <span className="label">market</span>
+          <select value={poolIdx} onChange={(e) => setPoolIdx(Number(e.target.value))}>
+            {markets.map((m, i) => (
+              <option key={m.pool} value={i}>{m.symbol} / {m.quoteSymbol}</option>
+            ))}
+          </select>
+        </div>
+      </section>
+
+      {watch.armed ? (
+        <WatchScreen
+          account={account}
+          market={market}
+          watch={watch}
+          armedCuts={rememberedCuts(account, market.pool, watch.cutsLeft)}
+          onChanged={watch.refresh}
+        />
+      ) : (
+        <div className="deck">
+          <div className="col">
+            <ArmForm
+              account={account}
+              market={market}
+              granted={watch.granted}
+              onDone={() => {
+                rememberCuts(account, market.pool, 0); // reset; re-set on a successful arm
+                void watch.refresh();
+              }}
+            />
+          </div>
+          <div className="col">
+            <section className="card">
+              <div className="hoop-wrap">
+                <Hoop
+                  status={watch.status}
+                  cutsMade={0}
+                  cutsTotal={0}
+                  dormant
+                  centre={watch.size === 0n ? "flat" : "open"}
+                  centreLabel={market.symbol}
+                />
+              </div>
+              <div className="hoop-status">
+                <div className="rung" style={{ color: "var(--subtle)" }}>No web yet</div>
+                <div className="note">
+                  {watch.size === 0n
+                    ? `No ${market.symbol} position to catch.`
+                    : `Margin is ${rungName(watch.status)}.`}
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+      )}
+    </>
+  );
 }
 
-/** Placeholder until the deployed address exists; the hoop below is the shape
- *  the armed screen takes. */
-function Live() {
-  const status = 1;
-  return (
-    <div className="deck">
-      <div className="col">
-        <section className="card">
-          <div className="hoop-wrap">
-            <Hoop status={status} cutsMade={1} cutsTotal={4} centre="0.42" centreLabel="btc long" />
-          </div>
-          <div className="hoop-status">
-            <div className="rung" style={{ color: rungColour(status) }}>{rungName(status)}</div>
-            <div className="note">Three strands left. Cuts at 95,000.</div>
-          </div>
-        </section>
-      </div>
-    </div>
-  );
+/**
+ *  The contract stores cuts REMAINING, not the number originally armed, so the
+ *  hoop cannot know how many strands a web started with. That total is a
+ *  per-viewer convenience, so it lives in localStorage and degrades to "all
+ *  remaining strands are the total" when it is missing — on another device, in
+ *  a private window, or with site data cleared.
+ */
+function cutsKey(account: string, pool: string) {
+  return `dreamcatcher:cuts:${account.toLowerCase()}:${pool.toLowerCase()}`;
+}
+function rememberCuts(account: string, pool: string, cuts: number) {
+  try { localStorage.setItem(cutsKey(account, pool), String(cuts)); } catch { /* unavailable */ }
+}
+function rememberedCuts(account: string, pool: string, left: number) {
+  try {
+    const v = Number(localStorage.getItem(cutsKey(account, pool)));
+    return Number.isFinite(v) && v >= left && v > 0 ? v : left;
+  } catch { return left; }
 }
 
 /* -------------------------------------------------------------------- bits */

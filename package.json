@@ -4,7 +4,9 @@
   "type": "module",
   "scripts": {
     "probe:network": "tsx scripts/probe-network.ts",
-    "probe:markets": "tsx scripts/probe-markets.ts"
+    "probe:markets": "tsx scripts/probe-markets.ts",
+    "deploy": "tsx --env-file=.env scripts/deploy.ts",
+    "deploy:dry": "tsx scripts/deploy.ts --dry"
   },
   "dependencies": {
     "@somnia-chain/markets-sdk": "0.32.1",

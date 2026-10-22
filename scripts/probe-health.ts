@@ -4,7 +4,6 @@
  */
 import { createPublicClient, http, formatUnits } from "viem";
 import { SomniaMarkets, SOMNIA_HIDEKI_TESTNET_ADDRESSES } from "@somnia-chain/markets-sdk";
-import { getAccountHealth, getMarginAccount } from "@somnia-chain/markets-sdk";
 import { hideki, INDEXER_URL, WS_URL, PERPS } from "../src/config.js";
 
 const markets = new SomniaMarkets({
@@ -24,7 +23,8 @@ for (const p of positions.slice(0, 4)) {
   console.log(`account ${acct}`);
   console.log(`   market ${p.baseSymbol ?? p.perpPool}  size ${p.size ?? p.netSize}`);
   try {
-    const health = await getAccountHealth(PERPS.marginBank as `0x${string}`, acct, client);
+    // These live on the client, not as standalone exports.
+    const health = await (markets.client as any).getAccountHealth(PERPS.marginBank, acct);
     for (const [k, v] of Object.entries(health)) {
       console.log(`   ${k.padEnd(22)} ${typeof v === "bigint" ? v.toString() : JSON.stringify(v)}`);
     }

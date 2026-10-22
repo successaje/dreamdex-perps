@@ -1,0 +1,17 @@
+{
+  "name": "dreamdex-perps",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "probe:network": "tsx scripts/probe-network.ts",
+    "probe:markets": "tsx scripts/probe-markets.ts"
+  },
+  "dependencies": {
+    "@somnia-chain/markets-sdk": "0.32.1",
+    "viem": "^2.21.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

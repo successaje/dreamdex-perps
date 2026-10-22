@@ -1,0 +1,17 @@
+[profile.default]
+src = "src"
+out = "out"
+# Relative, never absolute — an absolute path here pins the build to one machine.
+libs = ["../node_modules", "lib"]
+solc = "0.8.30"
+optimizer = true
+optimizer_runs = 200
+via_ir = true
+evm_version = "cancun"
+remappings = [
+  "@somnia-chain/reactivity-contracts/=../node_modules/@somnia-chain/reactivity-contracts/",
+  "forge-std/=lib/forge-std/src/",
+]
+
+[rpc_endpoints]
+hideki = "https://api.hideki2.infra.testnet.somnia.network"

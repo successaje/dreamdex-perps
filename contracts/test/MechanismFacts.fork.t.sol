@@ -2,18 +2,17 @@
 pragma solidity 0.8.30;
 
 import {Test, console} from "forge-std/Test.sol";
-import {Dreamcatcher} from "../src/Dreamcatcher.sol";
-import {IMarginBank, IERC20} from "../src/interfaces/IDreamDexPerps.sol";
+import {IMarginBank} from "../src/interfaces/IDreamDexPerps.sol";
 
 /**
- *  Against the real dreamDEX perps contracts on Hideki (chain 50383).
+ *  Facts about the deployed perps system on Hideki (chain 50383), pinned.
  *
- *  The mock suite pins our arithmetic. This one answers the questions only the
- *  deployed system can: does `depositFor` really accept a third-party payer,
- *  does our hand-written interface match the bytecode, and does a rescue move
- *  real margin. Those are the assumptions the whole product rests on.
+ *  These are not tests of Dreamcatcher. They are tests of the assumptions
+ *  Dreamcatcher is allowed to make — including one it originally made and the
+ *  chain refused. Keeping them green means a future deployment that changes
+ *  the rules breaks here, loudly, instead of changing behaviour unnoticed.
  */
-contract DreamcatcherForkTest is Test {
+contract MechanismFactsForkTest is Test {
     address constant MARGIN_BANK = 0x478769E1177C0773c43A593DCCc4Ad15F15F1394;
     /// The PERPS collateral — the market quoteToken, not the SDK's
     /// `addresses.collateral`, which is the binary/spot token.
@@ -21,12 +20,10 @@ contract DreamcatcherForkTest is Test {
     /// A live perp market, read from the venue rather than assumed.
     address constant BTC_POOL = 0x4181dd08E73BbCdd1Ba3E615A18f6abD941b94C0;
 
-    Dreamcatcher dc;
     address user = makeAddr("user");
 
     function setUp() public {
         vm.createSelectFork(vm.rpcUrl("hideki"));
-        dc = new Dreamcatcher(MARGIN_BANK, COLLATERAL);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -91,11 +88,11 @@ contract DreamcatcherForkTest is Test {
 
         deal(COLLATERAL, payer, 1_000e18);
         vm.startPrank(payer);
-        IERC20(COLLATERAL).approve(MARGIN_BANK, 1_000e18);
+        IERC20Meta(COLLATERAL).approve(MARGIN_BANK, 1_000e18);
 
         // OnlyPerpPool() — 0xad5d0577, resolved against the SDK's contractErrorsAbi.
         vm.expectRevert(bytes4(0xad5d0577));
-        IMarginBank(MARGIN_BANK).depositFor(beneficiary, 100e18);
+        IDepositFor(MARGIN_BANK).depositFor(beneficiary, 100e18);
         vm.stopPrank();
     }
 
@@ -124,67 +121,9 @@ contract DreamcatcherForkTest is Test {
      *  deployed system: the real token, the real bank, the real `depositFor`.
      */
     /// Skipped until the design moves off `depositFor`. Left in place so the
-    /// gap between what we built and what the chain allows stays visible.
-    function skip_test_rescueCreditsMarginOnTheLiveBank() public {
-        deal(COLLATERAL, user, 500e18);
-
-        vm.startPrank(user);
-        IERC20(COLLATERAL).approve(address(dc), 500e18);
-        dc.arm(100e18, 400e18, 1, 0);
-        vm.stopPrank();
-
-        // Healthy: nothing should happen.
-        dc.rescue(user);
-        assertEq(IERC20(COLLATERAL).balanceOf(user), 500e18, "healthy account untouched");
-
-        // Force a margin call. Only this read is mocked.
-        vm.mockCall(
-            MARGIN_BANK,
-            abi.encodeWithSelector(IMarginBank.getMarginStatus.selector, user),
-            abi.encode(uint8(1))
-        );
-
-        (bool would, uint256 amount,, string memory why) = dc.quote(user);
-        assertTrue(would, why);
-        assertEq(amount, 100e18);
-
-        dc.rescue(user);
-
-        assertEq(
-            IERC20(COLLATERAL).balanceOf(user),
-            400e18,
-            "100 pulled from the user's own wallet"
-        );
-        assertEq(IERC20(COLLATERAL).balanceOf(address(dc)), 0, "Dreamcatcher keeps nothing");
-
-        (, uint128 budget,,,,) = dc.watches(user);
-        assertEq(budget, 300e18, "budget spent by exactly the rescue");
-    }
 
     /// Dreamcatcher must never end a rescue holding the user's money.
     /// Passes today only because delivery fails and is caught — worth saying
-    /// out loud rather than banking a green tick on the wrong reason.
-    function test_noCollateralIsLeftSittingInTheContract() public {
-        deal(COLLATERAL, user, 500e18);
-        vm.startPrank(user);
-        IERC20(COLLATERAL).approve(address(dc), 500e18);
-        dc.arm(250e18, 500e18, 1, 0);
-        vm.stopPrank();
-
-        vm.mockCall(
-            MARGIN_BANK,
-            abi.encodeWithSelector(IMarginBank.getMarginStatus.selector, user),
-            abi.encode(uint8(2))
-        );
-        dc.rescue(user);
-
-        assertEq(IERC20(COLLATERAL).balanceOf(address(dc)), 0, "no dust retained");
-        assertEq(
-            IERC20(COLLATERAL).allowance(address(dc), MARGIN_BANK),
-            0,
-            "no standing approval left behind"
-        );
-    }
 
     function _contains(bytes memory haystack, bytes4 needle) private pure returns (bool) {
         for (uint256 i = 0; i + 4 <= haystack.length; ++i) {
@@ -197,6 +136,14 @@ contract DreamcatcherForkTest is Test {
     }
 }
 
+/// Declared locally: the production interface deliberately no longer carries
+/// `depositFor`, because the chain refuses it for any caller that is not a
+/// perp pool. This test is what records that refusal.
+interface IDepositFor {
+    function depositFor(address account, uint256 amount) external;
+}
+
 interface IERC20Meta {
     function decimals() external view returns (uint8);
+    function approve(address spender, uint256 amount) external returns (bool);
 }

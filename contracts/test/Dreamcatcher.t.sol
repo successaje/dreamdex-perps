@@ -3,216 +3,284 @@ pragma solidity 0.8.30;
 
 import {Test} from "forge-std/Test.sol";
 import {Dreamcatcher} from "../src/Dreamcatcher.sol";
-import {IERC20} from "../src/interfaces/IDreamDexPerps.sol";
 
-/// Minimal stand-ins. The fork tests against the real MarginBank come next;
-/// these pin the policy arithmetic, which is where a quiet bug would live.
+/// Stand-ins for the three contracts Dreamcatcher talks to. The fork suite
+/// proves these match the real ones; this suite proves the policy arithmetic,
+/// which is where a quiet bug would live.
 contract MockBank {
     uint8 public status;
-    mapping(address => uint256) public credited;
-    bool public revertOnDeposit;
+    mapping(address => mapping(address => int256)) public size;
 
     function setStatus(uint8 s) external { status = s; }
-    function setRevert(bool r) external { revertOnDeposit = r; }
+    function setSize(address a, address p, int256 s) external { size[a][p] = s; }
     function getMarginStatus(address) external view returns (uint8) { return status; }
-    function depositFor(address account, uint256 amount) external {
-        require(!revertOnDeposit, "bank down");
-        credited[account] += amount;
+    function getPosition(address a, address p) external view returns (int256, uint256, int256, int256) {
+        return (size[a][p], 0, 0, 0);
     }
 }
 
-contract MockToken is IERC20 {
-    mapping(address => uint256) public bal;
-    mapping(address => mapping(address => uint256)) public allow;
-    bool public returnFalse;
+contract MockPool {
+    struct Order { address account; bool isBid; uint256 price; uint256 quantity; }
+    Order[] public orders;
+    bool public revertOnPlace;
 
-    function setReturnFalse(bool v) external { returnFalse = v; }
-    function mint(address to, uint256 a) external { bal[to] += a; }
-    function balanceOf(address o) external view returns (uint256) { return bal[o]; }
-    function allowance(address o, address s) external view returns (uint256) { return allow[o][s]; }
-    function approve(address s, uint256 a) external returns (bool) {
-        if (returnFalse) return false;
-        allow[msg.sender][s] = a;
-        return true;
+    function setRevert(bool v) external { revertOnPlace = v; }
+    function count() external view returns (uint256) { return orders.length; }
+    function placeOrderFor(
+        address account, bool isBid, uint64, uint256 price, uint256 quantity,
+        uint64, uint8, uint8, address, uint96
+    ) external {
+        require(!revertOnPlace, "pool down");
+        orders.push(Order(account, isBid, price, quantity));
     }
-    function transferFrom(address f, address t, uint256 a) external returns (bool) {
-        if (returnFalse) return false;
-        require(bal[f] >= a && allow[f][msg.sender] >= a, "insufficient");
-        bal[f] -= a; bal[t] += a; allow[f][msg.sender] -= a;
-        return true;
+    function last() external view returns (Order memory) { return orders[orders.length - 1]; }
+}
+
+contract MockRegistry {
+    mapping(bytes32 => bool) public granted;
+    function grant(address pool, address owner, address op, bytes4 sel, bool v) external {
+        granted[keccak256(abi.encode(pool, owner, op, sel))] = v;
+    }
+    function isApprovedForPool(address pool, address owner, address op, bytes4 sel) external view returns (bool) {
+        return granted[keccak256(abi.encode(pool, owner, op, sel))];
     }
 }
 
 contract DreamcatcherTest is Test {
     Dreamcatcher dc;
     MockBank bank;
-    MockToken token;
+    MockPool pool;
+    MockRegistry reg;
+
     address user = makeAddr("user");
+    uint128 constant LOT = 1e6;
+    uint256 constant LIMIT = 95_000e18;
 
     function setUp() public {
         bank = new MockBank();
-        token = new MockToken();
-        dc = new Dreamcatcher(address(bank), address(token));
-
-        token.mint(user, 1_000e18);
-        vm.prank(user);
-        token.approve(address(dc), 1_000e18);
+        pool = new MockPool();
+        reg = new MockRegistry();
+        dc = new Dreamcatcher(address(bank), address(reg));
+        reg.grant(address(pool), user, address(dc), dc.PLACE_ORDER_FOR(), true);
     }
 
-    function _arm(uint128 per, uint128 budget, uint8 trigger, uint32 cd) internal {
+    function _arm(uint16 reduceBps, uint8 trigger, uint32 cd, uint16 cuts) internal {
         vm.prank(user);
-        dc.arm(per, budget, trigger, cd);
+        dc.arm(address(pool), LIMIT, reduceBps, LOT, trigger, 0, cd, cuts);
+    }
+
+    /*//////////////////////////////////////////////////////// direction */
+
+    /// The one that must never be wrong: cutting a LONG means SELLING.
+    /// Getting this backwards would grow the position at the worst moment.
+    function test_longIsReducedBySelling() public {
+        _arm(2_500, 1, 0, 5);
+        bank.setSize(user, address(pool), 100e6); // long
+        bank.setStatus(1);
+
+        dc.cut(user, address(pool));
+
+        MockPool.Order memory o = pool.last();
+        assertEq(o.account, user);
+        assertFalse(o.isBid, "selling to reduce a long");
+        assertEq(o.quantity, 25e6, "25% of the position");
+        assertEq(o.price, LIMIT, "the user's limit, nobody else's");
+    }
+
+    function test_shortIsReducedByBuying() public {
+        _arm(2_500, 1, 0, 5);
+        bank.setSize(user, address(pool), -100e6); // short
+        bank.setStatus(1);
+
+        dc.cut(user, address(pool));
+
+        MockPool.Order memory o = pool.last();
+        assertTrue(o.isBid, "buying to reduce a short");
+        assertEq(o.quantity, 25e6);
     }
 
     /*//////////////////////////////////////////////////////////// policy */
 
-    function test_armStoresThePolicy() public {
-        _arm(100e18, 400e18, 1, 60);
-        (uint128 per, uint128 budget, uint8 trigger, uint32 cd,, bool armed) = dc.watches(user);
-        assertEq(per, 100e18);
-        assertEq(budget, 400e18);
-        assertEq(trigger, 1);
-        assertEq(cd, 60);
-        assertTrue(armed);
-    }
-
-    /// A watch that fires while healthy would drain a budget for nothing.
-    function test_armRejectsHealthyTrigger() public {
-        vm.prank(user);
-        vm.expectRevert(Dreamcatcher.TriggerOutOfRange.selector);
-        dc.arm(100e18, 400e18, 0, 60);
-    }
-
-    function test_armRejectsBudgetBelowPerRescue() public {
-        vm.prank(user);
-        vm.expectRevert(Dreamcatcher.BudgetBelowPerRescue.selector);
-        dc.arm(100e18, 50e18, 1, 60);
-    }
-
-    /*//////////////////////////////////////////////////////////// rescue */
-
-    function test_healthyAccountIsSkippedNotReverted() public {
-        _arm(100e18, 400e18, 1, 60);
+    function test_healthyPositionIsLeftAlone() public {
+        _arm(2_500, 1, 0, 5);
+        bank.setSize(user, address(pool), 100e6);
         bank.setStatus(0); // Healthy
-        dc.rescue(user);   // must not revert
-        assertEq(bank.credited(user), 0);
-        (, uint128 budget,,,,) = dc.watches(user);
-        assertEq(budget, 400e18, "nothing spent");
+
+        dc.cut(user, address(pool));
+        assertEq(pool.count(), 0, "nothing placed");
     }
 
-    /// An account nobody armed must cost a caller almost nothing and never throw.
+    function test_triggerRungIsRespected() public {
+        _arm(2_500, 2, 0, 5); // only from PartialLiquidation
+        bank.setSize(user, address(pool), 100e6);
+
+        bank.setStatus(1); // MarginCall - below the chosen rung
+        dc.cut(user, address(pool));
+        assertEq(pool.count(), 0, "margin call is not enough for this watch");
+
+        bank.setStatus(2);
+        dc.cut(user, address(pool));
+        assertEq(pool.count(), 1, "fires at partial liquidation");
+    }
+
+    function test_flatAccountIsANoOp() public {
+        _arm(2_500, 1, 0, 5);
+        bank.setStatus(3);
+        dc.cut(user, address(pool)); // size 0
+        assertEq(pool.count(), 0);
+    }
+
     function test_unknownAccountIsANoOp() public {
         bank.setStatus(3);
-        dc.rescue(makeAddr("stranger"));
+        dc.cut(makeAddr("stranger"), address(pool));
+        assertEq(pool.count(), 0);
     }
 
-    function test_rescueCreditsMarginAndSpendsBudget() public {
-        _arm(100e18, 400e18, 1, 60);
-        bank.setStatus(1); // MarginCall
-
-        dc.rescue(user);
-
-        assertEq(bank.credited(user), 100e18, "margin credited");
-        assertEq(token.balanceOf(user), 900e18, "pulled from the user's own wallet");
-        (, uint128 budget,,,,) = dc.watches(user);
-        assertEq(budget, 300e18, "budget spent by exactly the rescue");
-    }
-
-    function test_cooldownBlocksASecondRescue() public {
-        _arm(100e18, 400e18, 1, 600);
+    /// Quantity rounds DOWN onto the lot grid; a sub-lot order is rejected
+    /// outright by the venue, so it must never be sent.
+    function test_quantityRoundsDownOntoTheLot() public {
+        _arm(3_333, 1, 0, 5);
+        bank.setSize(user, address(pool), 10e6);
         bank.setStatus(1);
 
-        dc.rescue(user);
-        dc.rescue(user); // inside cooldown
-        assertEq(bank.credited(user), 100e18, "second rescue suppressed");
-
-        vm.warp(block.timestamp + 601);
-        dc.rescue(user);
-        assertEq(bank.credited(user), 200e18, "fires again after cooldown");
+        dc.cut(user, address(pool));
+        MockPool.Order memory o = pool.last();
+        assertEq(o.quantity % LOT, 0, "on the lot grid");
+        assertEq(o.quantity, 3e6, "33.33% of 10e6 floored to a whole lot");
     }
 
-    /// The budget is the hard ceiling, however bad things get.
-    function test_budgetIsExhaustedNotExceeded() public {
-        _arm(100e18, 250e18, 1, 0);
+    function test_cutBelowOneLotIsSkipped() public {
+        _arm(1, 1, 0, 5); // 0.01% of a small position
+        bank.setSize(user, address(pool), 10e6);
+        bank.setStatus(1);
+
+        dc.cut(user, address(pool));
+        assertEq(pool.count(), 0, "never send a sub-lot order");
+    }
+
+    /*//////////////////////////////////////////////////////////// bounds */
+
+    function test_cutsAreABudgetNotAnAllowance() public {
+        _arm(2_500, 1, 0, 2);
+        bank.setSize(user, address(pool), 100e6);
         bank.setStatus(2);
 
-        dc.rescue(user);
-        dc.rescue(user);
-        dc.rescue(user); // only 50 left
-        dc.rescue(user); // nothing left
+        dc.cut(user, address(pool));
+        dc.cut(user, address(pool));
+        dc.cut(user, address(pool)); // budget spent
 
-        assertEq(bank.credited(user), 250e18, "never more than the budget");
-        (, uint128 budget,,,,) = dc.watches(user);
-        assertEq(budget, 0);
+        assertEq(pool.count(), 2, "exactly the cuts the user allowed");
     }
 
-    /// Revoking the allowance is the user's off switch and must be honoured
-    /// without anyone needing to call disarm.
-    function test_revokedAllowanceStopsRescues() public {
-        _arm(100e18, 400e18, 1, 0);
+    function test_cooldownSpacesCuts() public {
+        _arm(2_500, 1, 600, 5);
+        bank.setSize(user, address(pool), 100e6);
         bank.setStatus(1);
 
-        vm.prank(user);
-        token.approve(address(dc), 0);
+        dc.cut(user, address(pool));
+        dc.cut(user, address(pool));
+        assertEq(pool.count(), 1, "second cut suppressed");
 
-        dc.rescue(user);
-        assertEq(bank.credited(user), 0, "no allowance, no rescue");
-        (, uint128 budget,,,,) = dc.watches(user);
-        assertEq(budget, 400e18, "and no budget consumed");
+        vm.warp(block.timestamp + 601);
+        dc.cut(user, address(pool));
+        assertEq(pool.count(), 2, "fires again after cooling down");
     }
 
-    /// A failed delivery must not quietly consume budget.
-    function test_failedDeliveryRefundsTheBudget() public {
-        _arm(100e18, 400e18, 1, 0);
-        bank.setStatus(1);
-        bank.setRevert(true);
+    /// Revoking the grant in dreamDEX's own registry is the real off switch,
+    /// and it must work without anyone calling disarm here.
+    function test_revokingTheGrantStopsCuts() public {
+        _arm(2_500, 1, 0, 5);
+        bank.setSize(user, address(pool), 100e6);
+        bank.setStatus(2);
 
-        dc.rescue(user);
+        reg.grant(address(pool), user, address(dc), dc.PLACE_ORDER_FOR(), false);
 
-        assertEq(bank.credited(user), 0);
-        (, uint128 budget,,,,) = dc.watches(user);
-        assertEq(budget, 400e18, "budget returned after a failed delivery");
+        dc.cut(user, address(pool));
+        assertEq(pool.count(), 0, "no grant, no cut");
+        (,,,,,,, uint16 cutsLeft, bool armed) = dc.watches(user, address(pool));
+        assertEq(cutsLeft, 5, "and no budget consumed");
+        assertTrue(armed, "the watch itself is untouched");
     }
 
-    /// A token that returns false rather than reverting must not be read as success.
-    function test_tokenReturningFalseIsTreatedAsFailure() public {
-        _arm(100e18, 400e18, 1, 0);
+    /// A failed order must not silently consume one of the user's cuts.
+    function test_failedOrderRefundsTheCut() public {
+        _arm(2_500, 1, 0, 3);
+        bank.setSize(user, address(pool), 100e6);
         bank.setStatus(1);
-        token.setReturnFalse(true);
+        pool.setRevert(true);
 
-        dc.rescue(user);
+        dc.cut(user, address(pool));
 
-        assertEq(bank.credited(user), 0);
-        (, uint128 budget,,,,) = dc.watches(user);
-        assertEq(budget, 400e18, "budget not spent on a silent token failure");
+        (,,,,,,, uint16 cutsLeft,) = dc.watches(user, address(pool));
+        assertEq(cutsLeft, 3, "budget returned after a failed order");
     }
 
     function test_disarmStopsEverything() public {
-        _arm(100e18, 400e18, 1, 0);
+        _arm(2_500, 1, 0, 5);
+        bank.setSize(user, address(pool), 100e6);
         vm.prank(user);
-        dc.disarm();
+        dc.disarm(address(pool));
+
         bank.setStatus(3);
-        dc.rescue(user);
-        assertEq(bank.credited(user), 0);
+        dc.cut(user, address(pool));
+        assertEq(pool.count(), 0);
+    }
+
+    /// Watches are per pool, so arming one pool must not arm another.
+    function test_watchesDoNotLeakAcrossPools() public {
+        MockPool other = new MockPool();
+        _arm(2_500, 1, 0, 5);
+        bank.setSize(user, address(other), 100e6);
+        bank.setStatus(3);
+
+        dc.cut(user, address(other));
+        assertEq(other.count(), 0, "the other pool was never armed");
     }
 
     /*//////////////////////////////////////////////////////////// quote */
 
-    function test_quoteExplainsWhyItWouldNotFire() public {
-        _arm(100e18, 400e18, 2, 0);
-        bank.setStatus(1); // below the chosen trigger
-        (bool would,, uint8 status, string memory why) = dc.quote(user);
-        assertFalse(would);
-        assertEq(status, 1);
-        assertEq(why, "above trigger");
+    function test_quoteMatchesWhatACutDoes() public {
+        _arm(2_500, 1, 0, 5);
+        bank.setSize(user, address(pool), 100e6);
+        bank.setStatus(1);
+
+        (bool would, bool isBid, uint256 qty,, string memory why) = dc.quote(user, address(pool));
+        assertTrue(would, why);
+
+        dc.cut(user, address(pool));
+        MockPool.Order memory o = pool.last();
+        assertEq(o.quantity, qty, "quote is the truth, not an estimate");
+        assertEq(o.isBid, isBid);
     }
 
-    function test_quoteMatchesWhatARescueSpends() public {
-        _arm(100e18, 400e18, 1, 0);
+    function test_quoteNamesTheMissingGrant() public {
+        _arm(2_500, 1, 0, 5);
+        bank.setSize(user, address(pool), 100e6);
         bank.setStatus(1);
-        (bool would, uint256 amount,,) = dc.quote(user);
-        assertTrue(would);
-        dc.rescue(user);
-        assertEq(bank.credited(user), amount, "quote is the truth, not an estimate");
+        reg.grant(address(pool), user, address(dc), dc.PLACE_ORDER_FOR(), false);
+
+        (bool would,,,, string memory why) = dc.quote(user, address(pool));
+        assertFalse(would);
+        assertEq(why, "operator grant missing");
+    }
+
+    /*//////////////////////////////////////////////////////////// arming */
+
+    function test_armRejectsAHealthyTrigger() public {
+        vm.prank(user);
+        vm.expectRevert(Dreamcatcher.TriggerOutOfRange.selector);
+        dc.arm(address(pool), LIMIT, 2_500, LOT, 0, 0, 0, 5);
+    }
+
+    function test_armRejectsAZeroLimitPrice() public {
+        vm.prank(user);
+        vm.expectRevert(Dreamcatcher.ZeroLimitPrice.selector);
+        dc.arm(address(pool), 0, 2_500, LOT, 1, 0, 0, 5);
+    }
+
+    function test_armRejectsAnOversizedReduction() public {
+        vm.prank(user);
+        vm.expectRevert(Dreamcatcher.ReduceOutOfRange.selector);
+        dc.arm(address(pool), LIMIT, 10_001, LOT, 1, 0, 0, 5);
     }
 }

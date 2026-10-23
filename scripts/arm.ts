@@ -9,7 +9,7 @@ import { createPublicClient, createWalletClient, formatUnits, http, parseAbi, pa
 import { privateKeyToAccount } from "viem/accounts";
 import { hideki, PERPS } from "../src/config.js";
 
-const DREAMCATCHER = "0x34d156d6c062804771652b48f2d65d58d3794113" as const;
+const DREAMCATCHER = "0xcaff129ec344a98da8c9a4091a239df158cf31a5" as const;
 const POOL = "0x4181dd08E73BbCdd1Ba3E615A18f6abD941b94C0" as const; // BTC
 const PLACE_ORDER_FOR = "0x80054449" as const;
 

@@ -72,19 +72,17 @@ delegated creation is impossible.
 ## Unsupported, unknown, or NOT established
 
 - **No filled reduction has ever happened.** Every "cut" to date is a skip.
-- **The deployed contract has no reactivity.** `0x34d156d6…4113` is the
-  5,344-byte pre-callback build: `onEvent`, `subscribePool` and `rosterLength`
-  are absent on chain. Reactivity exists in source only, and no subscription has
-  been created.
-- **`placeOrderFor` has no reduce-only guarantee.** `PlacePerpOrderParams`
-  carries only `isBid`, `price`, `quantity`, `orderType` — there is no
-  reduce-only flag, and nothing stops an opposite-side order from overshooting
-  and flipping the position if size changed between the read and the fill.
-- **`orderType: 0` is `LIMIT` — a RESTING order**, not an immediate one. The
-  app passes 0 today, so a "cut" would rest on the book rather than cut.
-- **Cut accounting is order-based, not fill-based.** `cutsLeft` decrements and
-  `Cut` is emitted when `placeOrderFor` returns, which is submission, not a
-  reduction.
+- **Reactivity is deployed but DORMANT.** As of `0xcaff129e…31a5` (8,608 bytes)
+  `onEvent`, `subscribePool` and `rosterLength` are present on chain — the
+  earlier deployment genuinely lacked them. **No subscription has been
+  created**, so no callback has ever fired, and `subscribePool` needs 32 native
+  tokens held by the contract.
+- **`placeOrderFor` still has no venue-enforced reduce-only flag.** Non-increase
+  is now obtained from ATOMICITY instead: execution is IOC, the quantity is
+  capped at the live magnitude read in the same call, and `deliver` re-reads the
+  position afterwards and reverts — unwinding the order — if the account ended
+  up larger or flipped. That is a property of our transaction, not a promise by
+  the venue.
 - **The roster is swept from index 0 with no rotation.** Entries 4+ are never
   reached by a callback.
 - **Disarm and revoke do not cancel resting orders**, and nothing has tested

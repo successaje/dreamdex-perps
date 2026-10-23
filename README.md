@@ -19,9 +19,10 @@ Built for the [dreamDEX Perps Builder Bounty](https://dorahacks.io/hackathon/dre
 ## Live on Somnia Hideki (Tokyo) testnet
 
 ```
-Dreamcatcher   0x34d156d6c062804771652b48f2d65d58d3794113
+Dreamcatcher   0xcaff129ec344a98da8c9a4091a239df158cf31a5
 chain          50383
-explorer       https://explorer.testnet.somnia.network/tokyo/address/0x34d156d6c062804771652b48f2d65d58d3794113
+execution      immediate-or-cancel only, enforced by the contract
+explorer       https://explorer.testnet.somnia.network/tokyo/address/0xcaff129ec344a98da8c9a4091a239df158cf31a5
 ```
 
 A real position, a real watch, and a real cut, in order:

@@ -14,13 +14,14 @@ import { useState } from "react";
  *  answer the user cares about is the one that will actually run.
  */
 export function WatchScreen({
-  account, market, watch, armedCuts, onChanged,
+  account, market, watch, armedCuts, onChanged, readOnly,
 }: {
   account: `0x${string}`;
   market: PerpMarket;
   watch: WatchState;
   armedCuts: number;
   onChanged: () => void;
+  readOnly?: boolean;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const long = watch.size > 0n;
@@ -117,6 +118,12 @@ export function WatchScreen({
             stronger of the two switches, and it is dreamDEX's, not ours.
           </p>
 
+          {readOnly ? (
+            <p className="sub" style={{ marginTop: 14, color: "var(--subtle)" }}>
+              Watching read-only. Connect the owning wallet to change anything.
+            </p>
+          ) : (
+          <>
           <button className="cta ghost" onClick={revoke} disabled={!watch.granted || busy !== null}>
             {busy === "revoke" ? "Check your wallet…" : "Revoke permission"}
           </button>
@@ -124,6 +131,8 @@ export function WatchScreen({
                   style={{ marginTop: 8 }}>
             {busy === "disarm" ? "Check your wallet…" : "Take down the web"}
           </button>
+          </>
+          )}
         </section>
       </div>
     </div>

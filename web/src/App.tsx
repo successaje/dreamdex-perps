@@ -8,9 +8,23 @@ import { useWallet } from "./lib/useWallet";
 import { useVenue } from "./lib/useVenue";
 import { DREAMCATCHER, hideki } from "./lib/chain";
 
+/**
+ *  `?watch=0x…` opens somebody's watch read-only, with no wallet at all.
+ *
+ *  A live web is the interesting thing to show someone, and making them
+ *  install a wallet before they can look at it is a bad trade — especially for
+ *  anyone reviewing this who will not connect one to a stranger's app.
+ */
+function watchParam(): `0x${string}` | null {
+  const v = new URLSearchParams(window.location.search).get("watch");
+  return v && /^0x[0-9a-fA-F]{40}$/.test(v) ? (v as `0x${string}`) : null;
+}
+
 export default function App() {
   const wallet = useWallet();
+  const spectating = watchParam();
   const ready = Boolean(wallet.account) && wallet.onRightChain;
+  const viewing = ready ? wallet.account! : spectating;
 
   return (
     <main className="shell">
@@ -26,13 +40,15 @@ export default function App() {
           <span className={`dot ${ready ? "on" : ""}`} />
           {ready
             ? `${wallet.account!.slice(0, 6)}…${wallet.account!.slice(-4)}`
+            : spectating
+              ? `watching ${spectating.slice(0, 6)}…${spectating.slice(-4)}`
             : wallet.available
               ? wallet.connecting ? "Connecting…" : "Connect"
               : hideki.name}
         </button>
       </header>
 
-      {ready ? <Watching account={wallet.account!} /> : <Landing />}
+      {viewing ? <Watching account={viewing} readOnly={!ready} /> : <Landing />}
 
       <p className="foot">
         Liquidation takes your position at whatever the book offers, plus a penalty.
@@ -153,7 +169,7 @@ function WalletCta() {
 
 /* ----------------------------------------------------------------- watching */
 
-function Watching({ account }: { account: `0x${string}` }) {
+function Watching({ account, readOnly }: { account: `0x${string}`; readOnly?: boolean }) {
   const { markets, loading, error } = useMarkets();
   const [poolIdx, setPoolIdx] = useState(0);
   const market = markets[poolIdx] ?? null;
@@ -199,10 +215,20 @@ function Watching({ account }: { account: `0x${string}` }) {
           watch={watch}
           armedCuts={rememberedCuts(account, market.pool, watch.cutsLeft)}
           onChanged={watch.refresh}
+          readOnly={readOnly}
         />
       ) : (
         <div className="deck">
           <div className="col">
+            {readOnly ? (
+              <section className="card">
+                <h2>No web over {market.symbol}</h2>
+                <p className="sub" style={{ marginTop: 8 }}>
+                  This address has not armed a watch on this market. Connect the owning
+                  wallet to string one.
+                </p>
+              </section>
+            ) : (
             <ArmForm
               account={account}
               market={market}
@@ -212,6 +238,7 @@ function Watching({ account }: { account: `0x${string}` }) {
                 void watch.refresh();
               }}
             />
+            )}
           </div>
           <div className="col">
             <section className="card">

@@ -5,13 +5,15 @@ const INDEXER = "https://hideki-dev.smk.somnia.host/v1/graphql";
 /**
  *  Liquidations on dreamDEX perps, straight from the indexer.
  *
- *  Two measurements shaped this. Raw `eth_getLogs` is the wrong source because
- *  liquidations are BURSTY: an eighteen-minute window returned nothing on a
- *  venue doing several hundred a day, and a headline sitting at zero argues
- *  against the product. And the markets SDK, which the scripts in this repo use
- *  happily under Node, never resolves this call in the browser — so the web app
- *  queries the same indexer directly rather than shipping a spinner that never
- *  stops.
+ *  Raw `eth_getLogs` is the wrong source because liquidations are BURSTY: an
+ *  eighteen-minute window returned nothing on a venue doing several hundred a
+ *  day, and a headline sitting at zero argues against the product. The indexer
+ *  carries the whole history, so the number is both true and alive.
+ *
+ *  A direct GraphQL query rather than the SDK is a size choice, not a
+ *  correctness one. The SDK resolves this call in a browser in about 1.5s —
+ *  measured, after an earlier read of mine blamed it for a hang that turned out
+ *  to be a StrictMode deadlock in this very hook. One query needs one fetch.
  */
 // `timestamp` is a Hasura `numeric` column, not a string. Declaring $cut as
 // String! is accepted by the parser and rejected at validation, which reads

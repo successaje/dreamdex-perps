@@ -263,6 +263,39 @@ contract DreamcatcherTest is Test {
         assertEq(pool.count(), 1, "the same call succeeds when funded");
     }
 
+    /*//////////////////////////////////////////////////////// reactivity */
+
+    /// The roster is what the reactive callback iterates: the pool hands us an
+    /// emitter, never an account, so the list has to live in this contract.
+    function test_armJoinsTheRosterAndDisarmLeavesIt() public {
+        assertEq(dc.rosterLength(address(pool)), 0);
+        _arm(2_500, 1, 0, 5);
+        assertEq(dc.rosterLength(address(pool)), 1, "armed accounts are reachable from the pool");
+
+        vm.prank(user);
+        dc.disarm(address(pool));
+        assertEq(dc.rosterLength(address(pool)), 0, "and leave when the web comes down");
+    }
+
+    /// Re-arming must not enrol the same account twice, or one callback would
+    /// spend its whole budget checking one person repeatedly.
+    function test_rearmingDoesNotDuplicateTheRosterEntry() public {
+        _arm(2_500, 1, 0, 5);
+        _arm(5_000, 2, 60, 3);
+        assertEq(dc.rosterLength(address(pool)), 1);
+    }
+
+    /// Only the deployer may subscribe, and only with the gate funded.
+    function test_subscribeIsOwnerOnlyAndNeedsTheBalance() public {
+        vm.prank(user);
+        vm.expectRevert(Dreamcatcher.NotOwner.selector);
+        dc.subscribePool(address(pool), bytes32(0), 30_000_000, 1, 2);
+
+        // This test contract deployed it, so it is the owner - but holds nothing.
+        vm.expectRevert(abi.encodeWithSelector(Dreamcatcher.UnderFunded.selector, 0, 32 ether));
+        dc.subscribePool(address(pool), bytes32(0), 30_000_000, 1, 2);
+    }
+
     /*//////////////////////////////////////////////////////////// quote */
 
     function test_quoteMatchesWhatACutDoes() public {

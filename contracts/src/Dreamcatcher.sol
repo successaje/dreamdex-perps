@@ -2,6 +2,8 @@
 pragma solidity 0.8.30;
 
 import {IMarginBank, IPerpPool, IOperatorRegistry} from "./interfaces/IDreamDexPerps.sol";
+import {SomniaEventHandler} from "@somnia-chain/reactivity-contracts/contracts/SomniaEventHandler.sol";
+import {SomniaExtensions} from "@somnia-chain/reactivity-contracts/contracts/interfaces/SomniaExtensions.sol";
 
 /**
  *                            Dreamcatcher
@@ -23,7 +25,7 @@ import {IMarginBank, IPerpPool, IOperatorRegistry} from "./interfaces/IDreamDexP
  *  and `cut(account, pool)`, permissionless, so anyone can. Either alone is
  *  enough; a watch never depends on us being online.
  */
-contract Dreamcatcher {
+contract Dreamcatcher is SomniaEventHandler {
     /*//////////////////////////////////////////////////////////////
                                CONSTANTS
     //////////////////////////////////////////////////////////////*/
@@ -53,6 +55,18 @@ contract Dreamcatcher {
      *  who sees it knows to raise the gas limit rather than suspect the venue.
      */
     uint256 public constant MIN_READ_GAS = 5_000_000;
+
+    /**
+     *  Accounts a single reactive callback will check.
+     *
+     *  Deliberately tiny. `getMarginStatus` costs about 3.2M gas per account,
+     *  so a callback that swept twenty watchers would need 64M of gas before it
+     *  placed a single order. Three is roughly what fits in a sane handler
+     *  budget, and the permissionless `cut` covers whoever the sweep misses.
+     *  This is the honest ceiling of the reactive path on today's gas costs,
+     *  not a number chosen for neatness.
+     */
+    uint256 public constant MAX_PER_EVENT = 3;
 
     /*//////////////////////////////////////////////////////////////
                                  TYPES
@@ -92,6 +106,19 @@ contract Dreamcatcher {
     /// One watch per account per pool, because the grant is per pool too.
     mapping(address account => mapping(address pool => Watch)) public watches;
 
+    /**
+     *  Who to check when a pool stirs.
+     *
+     *  The reactive callback is handed an EMITTER, not an account — the pool
+     *  does not know who we are watching. So the roster has to live here, and
+     *  it has to be bounded: see MAX_PER_EVENT.
+     */
+    mapping(address pool => address[]) private _roster;
+    mapping(address pool => mapping(address account => bool)) private _onRoster;
+
+    /// Subscription ids, 0 while dormant.
+    mapping(address pool => uint256) public subscriptionOf;
+
     IMarginBank public immutable marginBank;
     IOperatorRegistry public immutable operatorRegistry;
 
@@ -115,11 +142,20 @@ contract Dreamcatcher {
     error NoCuts();
     error NotArmed();
     error NotSelf();
+    error NotOwner();
+    error AlreadySubscribed();
+    error UnderFunded(uint256 held, uint256 needed);
+
+    address public immutable owner;
 
     constructor(address marginBank_, address operatorRegistry_) {
         marginBank = IMarginBank(marginBank_);
         operatorRegistry = IOperatorRegistry(operatorRegistry_);
+        owner = msg.sender;
     }
+
+    /// Reactive callbacks are paid out of this contract's own balance.
+    receive() external payable {}
 
     /*//////////////////////////////////////////////////////////////
                                   USER
@@ -161,6 +197,11 @@ contract Dreamcatcher {
             armed: true
         });
 
+        if (!_onRoster[pool][msg.sender]) {
+            _onRoster[pool][msg.sender] = true;
+            _roster[pool].push(msg.sender);
+        }
+
         emit Armed(msg.sender, pool, limitPrice, reduceBps, triggerStatus, cuts);
     }
 
@@ -169,6 +210,7 @@ contract Dreamcatcher {
         require(w.armed, NotArmed());
         uint16 left = w.cutsLeft;
         delete watches[msg.sender][pool];
+        _dropFromRoster(pool, msg.sender);
         emit Disarmed(msg.sender, pool, left);
     }
 
@@ -284,6 +326,79 @@ contract Dreamcatcher {
             0
         );
     }
+
+    function _dropFromRoster(address pool, address account) private {
+        if (!_onRoster[pool][account]) return;
+        _onRoster[pool][account] = false;
+        address[] storage r = _roster[pool];
+        for (uint256 i = 0; i < r.length; ++i) {
+            if (r[i] == account) {
+                r[i] = r[r.length - 1];
+                r.pop();
+                return;
+            }
+        }
+    }
+
+    function rosterLength(address pool) external view returns (uint256) {
+        return _roster[pool].length;
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                               REACTIVITY
+    //////////////////////////////////////////////////////////////*/
+
+    /**
+     *  The chain stirs a pool; we check who we are watching there.
+     *
+     *  Runs as a synthetic transaction with the precompile as `msg.sender` and
+     *  this contract's balance paying the gas, so it must never revert on
+     *  something unrelated — every path inside `_cut` returns quietly instead.
+     */
+    function _onEvent(address emitter, bytes32[] calldata, bytes calldata) internal override {
+        address[] storage r = _roster[emitter];
+        uint256 n = r.length < MAX_PER_EVENT ? r.length : MAX_PER_EVENT;
+        for (uint256 i = 0; i < n; ++i) {
+            // One starved account must not swallow the rest of the budget.
+            if (gasleft() < MIN_READ_GAS) return;
+            _cut(r[i], emitter);
+        }
+    }
+
+    /**
+     *  Subscribe to one pool's events so the chain drives cuts there.
+     *
+     *  Needs 32 native tokens held by THIS contract — a sybil gate, not a fee:
+     *  the balance is never consumed, it just has to be there. Callbacks then
+     *  spend from the same balance, so top it up with a plain transfer.
+     */
+    function subscribePool(address pool, bytes32 topic0, uint64 gasLimit, uint64 priorityFeePerGas, uint64 maxFeePerGas)
+        external
+        returns (uint256 subscriptionId)
+    {
+        require(msg.sender == owner, NotOwner());
+        require(subscriptionOf[pool] == 0, AlreadySubscribed());
+        uint256 need = SomniaExtensions.SUBSCRIPTION_OWNER_MINIMUM_BALANCE;
+        require(address(this).balance >= need, UnderFunded(address(this).balance, need));
+
+        subscriptionId = SomniaExtensions.subscribe(
+            address(this),
+            SomniaExtensions.SubscriptionFilter({
+                eventTopics: [topic0, bytes32(0), bytes32(0), bytes32(0)],
+                origin: address(0),
+                emitter: pool
+            }),
+            SomniaExtensions.SubscriptionOptions({
+                priorityFeePerGas: priorityFeePerGas,
+                maxFeePerGas: maxFeePerGas,
+                gasLimit: gasLimit
+            })
+        );
+        subscriptionOf[pool] = subscriptionId;
+        emit Subscribed(pool, subscriptionId);
+    }
+
+    event Subscribed(address indexed pool, uint256 subscriptionId);
 
     /*//////////////////////////////////////////////////////////////
                                   VIEW

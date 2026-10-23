@@ -237,6 +237,32 @@ contract DreamcatcherTest is Test {
         assertEq(other.count(), 0, "the other pool was never armed");
     }
 
+    /// A cut starved of gas must say so, not blame the venue. Before this, the
+    /// first live cut reported "status unreadable" for a perfectly readable
+    /// position, because estimateGas priced the failure branch of the try/catch.
+    function test_starvedOfGasItSaysSo() public {
+        _arm(2_500, 1, 0, 5);
+        bank.setSize(user, address(pool), 100e6);
+        bank.setStatus(1);
+
+        vm.expectEmit(true, true, false, true);
+        emit Dreamcatcher.CutSkipped(user, address(pool), "insufficient gas to read status");
+        dc.cut{gas: 400_000}(user, address(pool));
+
+        assertEq(pool.count(), 0, "nothing placed");
+        (,,,,,,, uint16 cutsLeft,) = dc.watches(user, address(pool));
+        assertEq(cutsLeft, 5, "and no budget consumed");
+    }
+
+    function test_withEnoughGasItProceeds() public {
+        _arm(2_500, 1, 0, 5);
+        bank.setSize(user, address(pool), 100e6);
+        bank.setStatus(1);
+
+        dc.cut{gas: 30_000_000}(user, address(pool));
+        assertEq(pool.count(), 1, "the same call succeeds when funded");
+    }
+
     /*//////////////////////////////////////////////////////////// quote */
 
     function test_quoteMatchesWhatACutDoes() public {

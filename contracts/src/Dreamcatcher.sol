@@ -39,6 +39,21 @@ contract Dreamcatcher {
 
     uint16 internal constant BPS = 10_000;
 
+    /**
+     *  Gas that must remain before the margin reads are attempted.
+     *
+     *  `getMarginStatus` costs about 3.2 MILLION gas on Hideki — measured, not
+     *  guessed. Wrapped in `try/catch` that turns into a trap: `eth_estimateGas`
+     *  explores the cheap failure branch, returns a limit smaller than the read
+     *  itself, and the funded transaction then takes exactly the branch the
+     *  estimate priced. The first live `cut()` reported "status unreadable" for
+     *  a position whose status was perfectly readable.
+     *
+     *  Checking here converts that into an honest, diagnosable skip. A caller
+     *  who sees it knows to raise the gas limit rather than suspect the venue.
+     */
+    uint256 public constant MIN_READ_GAS = 5_000_000;
+
     /*//////////////////////////////////////////////////////////////
                                  TYPES
     //////////////////////////////////////////////////////////////*/
@@ -179,6 +194,13 @@ contract Dreamcatcher {
         }
         if (w.lastCutAt != 0 && block.timestamp < w.lastCutAt + w.cooldown) {
             emit CutSkipped(account, pool, "cooling down");
+            return;
+        }
+
+        // Before the reads, not after: a status read that runs out of gas is
+        // indistinguishable from a venue that cannot answer.
+        if (gasleft() < MIN_READ_GAS) {
+            emit CutSkipped(account, pool, "insufficient gas to read status");
             return;
         }
 

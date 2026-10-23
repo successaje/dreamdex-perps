@@ -21,9 +21,9 @@ SDK        @somnia-chain/markets-sdk 0.32.1
 ## Deployed
 
 ```
-Dreamcatcher   0x6444f16e29bf33a8c9da2b89e472b58bafe41b9c
+Dreamcatcher   0x34d156d6c062804771652b48f2d65d58d3794113
 network        Somnia Hideki / Tokyo testnet (chain 50383)
-explorer       https://explorer.testnet.somnia.network/tokyo/address/0x6444f16e29bf33a8c9da2b89e472b58bafe41b9c
+explorer       https://explorer.testnet.somnia.network/tokyo/address/0x34d156d6c062804771652b48f2d65d58d3794113
 size           5,205 bytes · 17.6M gas
 ```
 

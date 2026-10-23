@@ -19,14 +19,15 @@ export function WatchScreen({
   account: `0x${string}`;
   market: PerpMarket;
   watch: WatchState;
-  armedCuts: number;
+  /** Null when the armed total is unknown — see rememberedCuts. */
+  armedCuts: number | null;
   onChanged: () => void;
   readOnly?: boolean;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const long = watch.size > 0n;
   const magnitude = watch.size < 0n ? -watch.size : watch.size;
-  const spent = Math.max(0, armedCuts - watch.cutsLeft);
+  const spent = armedCuts === null ? null : Math.max(0, armedCuts - watch.cutsLeft);
 
   async function disarm() {
     if (!DREAMCATCHER) return;
@@ -61,8 +62,8 @@ export function WatchScreen({
           <div className="hoop-wrap">
             <Hoop
               status={watch.status}
-              cutsMade={spent}
-              cutsTotal={armedCuts}
+              cutsMade={spent ?? 0}
+              cutsTotal={armedCuts ?? 0}
               centre={magnitude === 0n ? "flat" : trim(formatUnits(magnitude, market.baseDecimals))}
               centreLabel={magnitude === 0n ? market.symbol : `${market.symbol} ${long ? "long" : "short"}`}
               dormant={!watch.armed}
@@ -84,7 +85,12 @@ export function WatchScreen({
           <div className="stats">
             <div>
               <div className="label">strands left</div>
-              <div className="v">{watch.cutsLeft}<span style={{ color: "var(--subtle)", fontSize: 13 }}>/{armedCuts}</span></div>
+              <div className="v">
+                {watch.cutsLeft}
+                {armedCuts !== null && (
+                  <span style={{ color: "var(--subtle)", fontSize: 13 }}>/{armedCuts}</span>
+                )}
+              </div>
             </div>
             <div>
               <div className="label">cuts at</div>
@@ -101,7 +107,9 @@ export function WatchScreen({
           <div className="stats" style={{ marginTop: 10 }}>
             <div>
               <div className="label">cuts spent</div>
-              <div className="v">{Math.max(0, armedCuts - watch.cutsLeft)}</div>
+              <div className="v" style={spent === null ? { color: "var(--subtle)", fontSize: 13 } : undefined}>
+                {spent ?? "unknown"}
+              </div>
             </div>
             <div>
               <div className="label">attempts</div>

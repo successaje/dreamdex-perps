@@ -213,7 +213,7 @@ function Watching({ account, readOnly }: { account: `0x${string}`; readOnly?: bo
           account={account}
           market={market}
           watch={watch}
-          armedCuts={rememberedCuts(account, market.pool, watch.cutsLeft)}
+          armedCuts={rememberedCuts(account, market.pool)}
           onChanged={watch.refresh}
           readOnly={readOnly}
         />
@@ -281,11 +281,20 @@ function cutsKey(account: string, pool: string) {
 function rememberCuts(account: string, pool: string, cuts: number) {
   try { localStorage.setItem(cutsKey(account, pool), String(cuts)); } catch { /* unavailable */ }
 }
-function rememberedCuts(account: string, pool: string, left: number) {
+/**
+ *  Returns null when the armed total is genuinely unknown.
+ *
+ *  It used to fall back to `cutsLeft`, which reads as "3 of 3, none spent" for
+ *  a watch that has already cut — a fabricated denominator on the one screen
+ *  that is supposed to be evidence. The contract stores cuts REMAINING, so on
+ *  another device, in a private window, or for a watch armed outside this app,
+ *  the total is not recoverable and the UI should say so.
+ */
+function rememberedCuts(account: string, pool: string): number | null {
   try {
     const v = Number(localStorage.getItem(cutsKey(account, pool)));
-    return Number.isFinite(v) && v >= left && v > 0 ? v : left;
-  } catch { return left; }
+    return Number.isFinite(v) && v > 0 ? v : null;
+  } catch { return null; }
 }
 
 /* -------------------------------------------------------------------- bits */

@@ -29,6 +29,31 @@ Four columns, and nothing is promoted without the evidence named.
   (`0x8d7fcdfc…096e`, 32,634 bytes) exposes `cancelPendingOrder` and
   `somiPaymentPerOrder`.
 
+## The stop path — verified and REJECTED
+
+Tested on the deployed BTC stop registry (`0x52E2ccebAeC9332672C247e9A90AA3d61FB615ef`,
+beacon impl `0x8d7fcdfc…096e`) with a delegate CONTRACT that is not the owner,
+which is the only arrangement that tests delegation rather than impersonation.
+
+- **The registry enforces reduce-only at creation.** The owner acting for
+  themselves is refused `NoReducingPositionAtCreation()` (`0xd156c90a`) — past
+  ownership validation, stopped because the account holds no position to
+  reduce. That is the guarantee we were looking for.
+- **But a delegate cannot use it.** A non-owner contract is refused
+  `InvalidOrderOwner()` (`0xc32ff34d`), **with or without an operator grant**.
+  The grant is recorded and changes nothing. `order.owner` must equal
+  `msg.sender`; the field is bookkeeping for the registry's own calls into the
+  pool, not a delegation mechanism.
+- A second prerequisite exists regardless: the owner must first approve the
+  **registry** as an operator on the pool, or every call reverts
+  `RegistryNotApprovedByOwner()` (`0x28e0a7ba`).
+- Each stop costs **0.15 STT**.
+
+**Conclusion: Dreamcatcher cannot move execution onto the stop path.** The
+dependent rewrite is stopped. The interaction between an account-margin trigger
+and a stop's price trigger was not investigated, because it is moot once
+delegated creation is impossible.
+
 ## Verified by executable test
 
 - 33 tests pass, 9 of them against forked live contracts.

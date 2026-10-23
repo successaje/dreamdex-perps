@@ -18,6 +18,19 @@ Explorer   https://explorer.testnet.somnia.network/tokyo
 SDK        @somnia-chain/markets-sdk 0.32.1
 ```
 
+## Deployed
+
+```
+Dreamcatcher   0x6444f16e29bf33a8c9da2b89e472b58bafe41b9c
+network        Somnia Hideki / Tokyo testnet (chain 50383)
+explorer       https://explorer.testnet.somnia.network/tokyo/address/0x6444f16e29bf33a8c9da2b89e472b58bafe41b9c
+size           5,205 bytes · 17.6M gas
+```
+
+Constructor wiring verified against the live protocol: `marginBank` and
+`operatorRegistry` match the documented addresses, and `PLACE_ORDER_FOR`
+resolves to `0x80054449` — the one selector a user ever grants.
+
 ## Probes
 
 ```bash

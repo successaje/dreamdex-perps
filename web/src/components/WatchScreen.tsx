@@ -95,6 +95,23 @@ export function WatchScreen({
               <div className="v">{watch.reduceBps / 100}%</div>
             </div>
           </div>
+
+          {/* An attempt is not a reduction. Showing both stops a run of empty
+              books reading as protection that already happened. */}
+          <div className="stats" style={{ marginTop: 10 }}>
+            <div>
+              <div className="label">cuts spent</div>
+              <div className="v">{Math.max(0, armedCuts - watch.cutsLeft)}</div>
+            </div>
+            <div>
+              <div className="label">attempts</div>
+              <div className="v">{watch.attempts}</div>
+            </div>
+            <div>
+              <div className="label">execution</div>
+              <div className="v" style={{ fontSize: 13 }}>IOC</div>
+            </div>
+          </div>
         </section>
       </div>
 
@@ -114,8 +131,15 @@ export function WatchScreen({
           </ul>
 
           <p className="sub" style={{ marginTop: 14, fontSize: 12.5 }}>
-            Revoking the permission stops Dreamcatcher whatever the watch says. It is the
-            stronger of the two switches, and it is dreamDEX's, not ours.
+            <strong style={{ color: "var(--heading)" }}>Two different switches.</strong>{" "}
+            Taking down the web stops this watch. Revoking the permission stops Dreamcatcher
+            on this market whatever the watch says — it is dreamDEX's switch, not ours, and
+            it is the stronger one.
+          </p>
+          <p className="sub" style={{ marginTop: 8, fontSize: 12.5 }}>
+            Neither cancels an order already accepted by the venue. Orders here are
+            immediate-or-cancel, so none rests long enough to outlive a revoke — but that is
+            a property of the execution, not a promise that revoking reaches into the book.
           </p>
 
           {readOnly ? (

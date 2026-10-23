@@ -59,7 +59,6 @@ export function ArmForm({
           reducePct * 100,
           market.lotSize,
           trigger,
-          0, // orderType: the venue's default; the contract passes it through
           cooldown,
           cuts,
         ],

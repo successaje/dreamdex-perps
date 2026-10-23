@@ -18,14 +18,15 @@ export const operatorRegistryAbi = parseAbi([
 ]);
 
 export const dreamcatcherAbi = parseAbi([
-  "function arm(address pool, uint256 limitPrice, uint16 reduceBps, uint128 lotSize, uint8 triggerStatus, uint8 orderType, uint32 cooldown, uint16 cuts)",
+  "function arm(address pool, uint256 limitPrice, uint16 reduceBps, uint128 lotSize, uint8 triggerStatus, uint32 cooldown, uint16 cuts)",
   "function disarm(address pool)",
   "function cut(address account, address pool)",
-  "function watches(address account, address pool) view returns (uint256 limitPrice, uint16 reduceBps, uint128 lotSize, uint8 triggerStatus, uint8 orderType, uint32 cooldown, uint64 lastCutAt, uint16 cutsLeft, bool armed)",
+  "function watches(address account, address pool) view returns (uint256 limitPrice, uint16 reduceBps, uint128 lotSize, uint8 triggerStatus, uint16 attempts, uint32 cooldown, uint64 lastCutAt, uint16 cutsLeft, bool armed)",
   "function quote(address account, address pool) view returns (bool wouldCut, bool isBid, uint256 quantity, uint8 status, string blockedBy)",
   "function PLACE_ORDER_FOR() view returns (bytes4)",
   "event Armed(address indexed account, address indexed pool, uint256 limitPrice, uint16 reduceBps, uint8 triggerStatus, uint16 cuts)",
-  "event Cut(address indexed account, address indexed pool, bool isBid, uint256 quantity, uint256 limitPrice, uint8 statusBefore, uint16 cutsLeft)",
+  "event Cut(address indexed account, address indexed pool, bool isBid, uint256 requested, uint256 filled, uint256 limitPrice, uint8 statusBefore, uint16 cutsLeft)",
+  "event CutNoFill(address indexed account, address indexed pool, uint256 requested, uint16 attempts)",
   "event CutSkipped(address indexed account, address indexed pool, string reason)",
   "event CutFailed(address indexed account, address indexed pool, bytes4 selector)",
   "event Disarmed(address indexed account, address indexed pool, uint16 cutsLeft)",

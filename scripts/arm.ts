@@ -31,7 +31,7 @@ const regAbi = parseAbi([
   "function isApprovedForPool(address pool, address owner, address operator, bytes4 selector) view returns (bool)",
 ]);
 const dcAbi = parseAbi([
-  "function arm(address pool, uint256 limitPrice, uint16 reduceBps, uint128 lotSize, uint8 triggerStatus, uint8 orderType, uint32 cooldown, uint16 cuts)",
+  "function arm(address pool, uint256 limitPrice, uint16 reduceBps, uint128 lotSize, uint8 triggerStatus, uint32 cooldown, uint16 cuts)",
   "function quote(address account, address pool) view returns (bool wouldCut, bool isBid, uint256 quantity, uint8 status, string blockedBy)",
 ]);
 
@@ -63,7 +63,7 @@ if (!granted) {
 console.log(`\n2 · arming — cut ${REDUCE_BPS / 100}% at margin call, never below ${formatUnits(LIMIT, 18)}…`);
 await send("arm", await wc.writeContract({
   address: DREAMCATCHER, abi: dcAbi, functionName: "arm",
-  args: [POOL, LIMIT, REDUCE_BPS, LOT, TRIGGER, 0, COOLDOWN, CUTS],
+  args: [POOL, LIMIT, REDUCE_BPS, LOT, TRIGGER, COOLDOWN, CUTS],
 }));
 
 const q = await pub.readContract({ address: DREAMCATCHER, abi: dcAbi, functionName: "quote", args: [account.address, POOL] });

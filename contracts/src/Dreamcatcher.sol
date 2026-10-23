@@ -39,6 +39,20 @@ contract Dreamcatcher is SomniaEventHandler {
     /// The single power a user grants us, and the only one we ever use.
     bytes4 public constant PLACE_ORDER_FOR = 0x80054449;
 
+    /**
+     *  ImmediateOrCancel — "fill what crosses now, cancel the remainder".
+     *
+     *  Hardcoded, never taken from a caller. The venue's enum is
+     *  `0 NormalOrder (rest), 1 FillOrKill, 2 ImmediateOrCancel, 3 PostOnly`,
+     *  and a RESTING order is what makes non-increase unprovable: between
+     *  placement and fill the position can change, and an order that was a
+     *  reduction becomes one that flips it. IOC collapses the read, the cap and
+     *  the fill into one transaction, so nothing can move in between. It also
+     *  leaves no remainder on the book, so there is never an old order for a
+     *  later disarm to worry about.
+     */
+    uint8 public constant ORDER_TYPE_IOC = 2;
+
     uint16 internal constant BPS = 10_000;
 
     /**
@@ -90,10 +104,9 @@ contract Dreamcatcher is SomniaEventHandler {
         uint128 lotSize;
         /// Fire when `getMarginStatus(account) >= this`.
         uint8 triggerStatus;
-        /// The venue's order-type code, supplied by the caller's frontend. Not
-        /// interpreted here — asserting an enum this contract has not verified
-        /// is how the last design went wrong.
-        uint8 orderType;
+        /// Attempts made, filled or not. Kept apart from `cutsLeft` because a
+        /// zero-fill is not a reduction and must not spend the user's budget.
+        uint16 attempts;
         /// Seconds between cuts on this pool.
         uint32 cooldown;
         uint64 lastCutAt;
@@ -128,7 +141,21 @@ contract Dreamcatcher is SomniaEventHandler {
 
     event Armed(address indexed account, address indexed pool, uint256 limitPrice, uint16 reduceBps, uint8 triggerStatus, uint16 cuts);
     event Disarmed(address indexed account, address indexed pool, uint16 cutsLeft);
-    event Cut(address indexed account, address indexed pool, bool isBid, uint256 quantity, uint256 limitPrice, uint8 statusBefore, uint16 cutsLeft);
+    /// `filled` is the measured reduction in position size, not the quantity
+    /// asked for. The two differ on every partial fill.
+    event Cut(
+        address indexed account,
+        address indexed pool,
+        bool isBid,
+        uint256 requested,
+        uint256 filled,
+        uint256 limitPrice,
+        uint8 statusBefore,
+        uint16 cutsLeft
+    );
+    /// An attempt that crossed nothing. Costs an attempt and the cooldown, but
+    /// NOT a cut — a zero-fill is not a reduction and must not spend the budget.
+    event CutNoFill(address indexed account, address indexed pool, uint256 requested, uint16 attempts);
     /// A cut that correctly did nothing. Every skip is on chain so a user can
     /// see the watch was awake and chose not to act.
     event CutSkipped(address indexed account, address indexed pool, string reason);
@@ -142,11 +169,30 @@ contract Dreamcatcher is SomniaEventHandler {
     error NoCuts();
     error NotArmed();
     error NotSelf();
+    /// The order left the account LARGER than it found it. Should be
+    /// unreachable with IOC and a capped quantity; if it ever fires, the whole
+    /// attempt is unwound rather than recorded.
+    error PositionIncreased(uint256 before_, uint256 after_);
+    /// The order crossed through flat and opened the other way.
+    error PositionFlipped(int256 before_, int256 after_);
     error NotOwner();
     error AlreadySubscribed();
     error UnderFunded(uint256 held, uint256 needed);
 
     address public immutable owner;
+
+    /// Nothing here calls out to a user-controlled contract, but `deliver`
+    /// re-enters this contract by design and the pool is upgradeable. The guard
+    /// costs one slot and removes a whole class of argument.
+    uint256 private _lock = 1;
+    error Reentrant();
+
+    modifier nonReentrant() {
+        require(_lock == 1, Reentrant());
+        _lock = 2;
+        _;
+        _lock = 1;
+    }
 
     constructor(address marginBank_, address operatorRegistry_) {
         marginBank = IMarginBank(marginBank_);
@@ -174,7 +220,6 @@ contract Dreamcatcher is SomniaEventHandler {
         uint16 reduceBps,
         uint128 lotSize,
         uint8 triggerStatus,
-        uint8 orderType,
         uint32 cooldown,
         uint16 cuts
     ) external {
@@ -190,7 +235,7 @@ contract Dreamcatcher is SomniaEventHandler {
             reduceBps: reduceBps,
             lotSize: lotSize,
             triggerStatus: triggerStatus,
-            orderType: orderType,
+            attempts: 0,
             cooldown: cooldown,
             lastCutAt: 0,
             cutsLeft: cuts,
@@ -222,7 +267,7 @@ contract Dreamcatcher is SomniaEventHandler {
     /// which is why it returns quietly rather than reverting on an account that
     /// simply does not need cutting — a revert there would burn this contract's
     /// gas on every unrelated margin event the chain emits.
-    function cut(address account, address pool) external {
+    function cut(address account, address pool) external nonReentrant {
         _cut(account, pool);
     }
 
@@ -290,41 +335,69 @@ contract Dreamcatcher is SomniaEventHandler {
             return;
         }
 
-        w.cutsLeft -= 1;
+        // The cooldown and the attempt counter move on EVERY attempt, so a
+        // market that keeps refusing cannot be retried in a tight loop. The
+        // reduction budget moves only when a reduction actually happens.
+        w.attempts += 1;
         w.lastCutAt = uint64(block.timestamp);
 
-        try this.deliver(account, pool, isBid, quantity, w.limitPrice, w.orderType) {
-            emit Cut(account, pool, isBid, quantity, w.limitPrice, status, w.cutsLeft);
+        try this.deliver(account, pool, isBid, quantity, w.limitPrice) returns (uint256 filled) {
+            if (filled == 0) {
+                emit CutNoFill(account, pool, quantity, w.attempts);
+                return;
+            }
+            w.cutsLeft -= 1;
+            emit Cut(account, pool, isBid, quantity, filled, w.limitPrice, status, w.cutsLeft);
         } catch (bytes memory err) {
-            // Nothing was placed, so the attempt should not count against the
-            // user's budget.
-            w.cutsLeft += 1;
+            // `deliver` is external to itself, so a revert in there unwound the
+            // order too. Nothing happened; nothing is recorded but the attempt.
             emit CutFailed(account, pool, err.length >= 4 ? bytes4(err) : bytes4(0));
         }
     }
 
-    /// The order leg, external so one failure is catchable as a unit.
-    function deliver(
-        address account,
-        address pool,
-        bool isBid,
-        uint256 quantity,
-        uint256 limitPrice,
-        uint8 orderType
-    ) external {
+    /**
+     *  The order leg. External so one failure is catchable as a unit — and so a
+     *  revert here unwinds the ORDER as well as our bookkeeping.
+     *
+     *  Reads the position on both sides of the call and returns the measured
+     *  reduction. Everything the caller records comes from this number, never
+     *  from the quantity that was asked for.
+     */
+    function deliver(address account, address pool, bool isBid, uint256 quantity, uint256 limitPrice)
+        external
+        returns (uint256 filled)
+    {
         require(msg.sender == address(this), NotSelf());
+
+        (int256 before_,,,) = marginBank.getPosition(account, pool);
+
         IPerpPool(pool).placeOrderFor(
             account,
             isBid,
             uint64(uint160(account)), // userData: attribution, nothing depends on it
             limitPrice,
             quantity,
-            uint64(block.timestamp + 300) * 1e9, // expiry in ns, five minutes out
-            orderType,
+            uint64(block.timestamp + 300) * 1e9, // expiry in ns; IOC never rests, so this is a formality
+            ORDER_TYPE_IOC,
             0, // selfMatchingOption: venue default
             address(0), // no builder
             0
         );
+
+        (int256 after_,,,) = marginBank.getPosition(account, pool);
+
+        // The whole safety claim, checked rather than argued. IOC plus a
+        // quantity capped at the live magnitude should make both impossible;
+        // if either ever holds, unwind instead of recording a "reduction" that
+        // made the user's exposure worse.
+        if ((before_ > 0 && after_ < 0) || (before_ < 0 && after_ > 0)) {
+            revert PositionFlipped(before_, after_);
+        }
+        uint256 magBefore = before_ < 0 ? uint256(-before_) : uint256(before_);
+        uint256 magAfter = after_ < 0 ? uint256(-after_) : uint256(after_);
+        if (magAfter > magBefore) revert PositionIncreased(magBefore, magAfter);
+
+        return magBefore - magAfter;
     }
 
     function _dropFromRoster(address pool, address account) private {

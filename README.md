@@ -25,13 +25,33 @@ execution      immediate-or-cancel only, enforced by the contract
 explorer       https://explorer.testnet.somnia.network/tokyo/address/0xcaff129ec344a98da8c9a4091a239df158cf31a5
 ```
 
-A real position, a real watch, and a real cut, in order:
+A real position, a real watch, and a **real filled reduction**, in order:
 
 - **Margin deposited** — [`0x4e972770…`](https://explorer.testnet.somnia.network/tokyo/tx/0x4e9727702fd304679915e4e2a64fa2810722eff47caff56ab98dd035dd17e685)
-- **Position opened** — [`0xac422e3e…`](https://explorer.testnet.somnia.network/tokyo/tx/0xac422e3e2a132491b21686bd9dba951c5029bdb7bb5c403ac78eb527990e0b08) · 0.002 BTC long at 81,858 on 15 USDso, about 10.9x
-- **Permission granted** — [`0xc6182bd0…`](https://explorer.testnet.somnia.network/tokyo/tx/0xc6182bd0d5f7cd4783e84a41b6df3dcea964b0948c64680b3063ec9897ab9840) · `placeOrderFor`, BTC only
-- **Watch armed** — [`0x3f34eed6…`](https://explorer.testnet.somnia.network/tokyo/tx/0x3f34eed64771c51df1f49bf648dcefd5e64e335c6ca94b3ee0ec885ac547651a) · cut 25% at margin call, never sell below 70,000
-- **Cut fired** — `CutSkipped "above trigger"`, which is the correct answer for a healthy position
+- **Position opened** — [`0xac422e3e…`](https://explorer.testnet.somnia.network/tokyo/tx/0xac422e3e2a132491b21686bd9dba951c5029bdb7bb5c403ac78eb527990e0b08) · 0.002 BTC long at 81,858
+- **Size increased to the margin edge** — [`0x4a2db694…`](https://explorer.testnet.somnia.network/tokyo/tx/0x4a2db694aca9e5d12e8465cf48b8bfc969581660efde99376a175b90aa518dc3) · 0.00312 BTC, equity 13.36 against an initial-margin requirement of 12.68
+- **Headroom withdrawn** — [`0x07c4b571…`](https://explorer.testnet.somnia.network/tokyo/tx/0x07c4b5714c0a2326cc439d2bbf2d0846b0780f04e8c6d6b5d13680bd75d20089) · 0.7 USDso out, leaving 0.0376 of headroom
+- **Permission granted** — [`0x3d0aee04…`](https://explorer.testnet.somnia.network/tokyo/tx/0x3d0aee0448cc030f15aebea6fcd6ecbddc4bb070323c546fbe5d44f3d7f59702) · `placeOrderFor`, BTC only
+- **Watch armed** — [`0xe9efcd60…`](https://explorer.testnet.somnia.network/tokyo/tx/0xe9efcd60358b64e3252fd7f47b1b96bc7c9aedfb742b3da6cedc686c52d8596c) · cut 25% at margin call, never sell below 70,000
+
+Then the market moved, the account crossed into **MarginCall**, and the cut fired:
+
+- **The cut** — [`0x347affab…`](https://explorer.testnet.somnia.network/tokyo/tx/0x347affab2aa4667126673adfc3f32df7e3c1b66b72c8a426c31414b98abbbb34)
+
+```
+Cut  isBid=false  requested=78000  filled=78000  statusBefore=1  cutsLeft=3
+position  0.00312 -> 0.00234 BTC      reduced 0.00078
+cutsLeft  3        attempts 1
+```
+
+Read that against the four claims it settles. The order **sold** to reduce a
+long. It was placed at **margin call**, not before. `filled` is measured from
+the position on both sides of the call, not copied from the request. And the
+budget moved by one cut because something actually reduced — a zero-fill would
+have spent an attempt and nothing else.
+
+Earlier cuts on healthy positions correctly did nothing and are recorded as
+`CutSkipped "above trigger"`.
 
 ## Who it is for
 

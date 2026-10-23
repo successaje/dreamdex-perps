@@ -71,7 +71,9 @@ delegated creation is impossible.
 
 ## Unsupported, unknown, or NOT established
 
-- **No filled reduction has ever happened.** Every "cut" to date is a skip.
+- ~~No filled reduction has ever happened.~~ **Settled.** `0x347affab…` reduced
+  0.00312 → 0.00234 BTC at MarginCall, `filled` equal to `requested` (78000),
+  one cut spent, one attempt recorded.
 - **Reactivity is deployed but DORMANT.** As of `0xcaff129e…31a5` (8,608 bytes)
   `onEvent`, `subscribePool` and `rosterLength` are present on chain — the
   earlier deployment genuinely lacked them. **No subscription has been

@@ -14,20 +14,21 @@ import { useState } from "react";
  *  answer the user cares about is the one that will actually run.
  */
 export function WatchScreen({
-  account, market, watch, armedCuts, onChanged, readOnly,
+  account, market, watch, onChanged, readOnly,
 }: {
   account: `0x${string}`;
   market: PerpMarket;
   watch: WatchState;
-  /** Null when the armed total is unknown — see rememberedCuts. */
-  armedCuts: number | null;
   onChanged: () => void;
   readOnly?: boolean;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const long = watch.size > 0n;
   const magnitude = watch.size < 0n ? -watch.size : watch.size;
-  const spent = armedCuts === null ? null : Math.max(0, armedCuts - watch.cutsLeft);
+  // Straight from chain state now; no browser bookkeeping, so it reads the
+  // same on any device.
+  const armedCuts = watch.armedCuts;
+  const spent = Math.max(0, armedCuts - watch.cutsLeft);
 
   async function disarm() {
     if (!DREAMCATCHER) return;
@@ -62,8 +63,8 @@ export function WatchScreen({
           <div className="hoop-wrap">
             <Hoop
               status={watch.status}
-              cutsMade={spent ?? 0}
-              cutsTotal={armedCuts ?? 0}
+              cutsMade={spent}
+              cutsTotal={armedCuts}
               centre={magnitude === 0n ? "flat" : trim(formatUnits(magnitude, market.baseDecimals))}
               centreLabel={magnitude === 0n ? market.symbol : `${market.symbol} ${long ? "long" : "short"}`}
               dormant={!watch.armed}
@@ -87,9 +88,7 @@ export function WatchScreen({
               <div className="label">strands left</div>
               <div className="v">
                 {watch.cutsLeft}
-                {armedCuts !== null && (
-                  <span style={{ color: "var(--subtle)", fontSize: 13 }}>/{armedCuts}</span>
-                )}
+                <span style={{ color: "var(--subtle)", fontSize: 13 }}>/{armedCuts}</span>
               </div>
             </div>
             <div>
@@ -107,9 +106,7 @@ export function WatchScreen({
           <div className="stats" style={{ marginTop: 10 }}>
             <div>
               <div className="label">cuts spent</div>
-              <div className="v" style={spent === null ? { color: "var(--subtle)", fontSize: 13 } : undefined}>
-                {spent ?? "unknown"}
-              </div>
+              <div className="v">{spent}</div>
             </div>
             <div>
               <div className="label">attempts</div>

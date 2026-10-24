@@ -222,7 +222,7 @@ contract DreamcatcherTest is Test {
 
         dc.cut(user, address(pool));
         assertEq(pool.count(), 0, "no grant, no cut");
-        (,,,,,,, uint16 cutsLeft, bool armed) = dc.watches(user, address(pool));
+        (,,,,,,, uint16 cutsLeft,, bool armed) = dc.watches(user, address(pool));
         assertEq(cutsLeft, 5, "and no budget consumed");
         assertTrue(armed, "the watch itself is untouched");
     }
@@ -236,7 +236,7 @@ contract DreamcatcherTest is Test {
 
         dc.cut(user, address(pool));
 
-        (,,,,,,, uint16 cutsLeft,) = dc.watches(user, address(pool));
+        (,,,,,,, uint16 cutsLeft,,) = dc.watches(user, address(pool));
         assertEq(cutsLeft, 3, "budget returned after a failed order");
     }
 
@@ -275,7 +275,7 @@ contract DreamcatcherTest is Test {
         dc.cut{gas: 400_000}(user, address(pool));
 
         assertEq(pool.count(), 0, "nothing placed");
-        (,,,,,,, uint16 cutsLeft,) = dc.watches(user, address(pool));
+        (,,,,,,, uint16 cutsLeft,,) = dc.watches(user, address(pool));
         assertEq(cutsLeft, 5, "and no budget consumed");
     }
 
@@ -286,6 +286,34 @@ contract DreamcatcherTest is Test {
 
         dc.cut{gas: 30_000_000}(user, address(pool));
         assertEq(pool.count(), 1, "the same call succeeds when funded");
+    }
+
+    /// Cuts spent must be answerable from chain state alone. Reading only
+    /// `cutsLeft` made the UI guess from browser storage and report "none
+    /// spent" for a watch that had already cut.
+    function test_cutsSpentIsReadableFromTheChain() public {
+        _arm(2_500, 1, 0, 4);
+        assertEq(dc.cutsSpent(user, address(pool)), 0, "nothing spent yet");
+
+        bank.setSize(user, address(pool), 100e6);
+        bank.setStatus(1);
+        dc.cut(user, address(pool));
+
+        assertEq(dc.cutsSpent(user, address(pool)), 1, "one real reduction");
+        (,,,,,,, uint16 left, uint16 armedCuts,) = dc.watches(user, address(pool));
+        assertEq(left, 3);
+        assertEq(armedCuts, 4, "the total armed with survives on chain");
+    }
+
+    /// A zero-fill attempt is not a spent cut, and the chain says so.
+    function test_cutsSpentIgnoresZeroFillAttempts() public {
+        _arm(2_500, 1, 0, 4);
+        bank.setSize(user, address(pool), 100e6);
+        bank.setStatus(1);
+        pool.setFillBps(0);
+
+        dc.cut(user, address(pool));
+        assertEq(dc.cutsSpent(user, address(pool)), 0, "an attempt is not a cut");
     }
 
     /*//////////////////////////////////////////////////// fill accounting */
@@ -313,7 +341,7 @@ contract DreamcatcherTest is Test {
         dc.cut(user, address(pool));
 
         assertEq(bank.size(user, address(pool)), 80e6, "20e6 actually left the position");
-        (,,,,,,, uint16 cutsLeft,) = dc.watches(user, address(pool));
+        (,,,,,,, uint16 cutsLeft,,) = dc.watches(user, address(pool));
         assertEq(cutsLeft, 4, "a real reduction spends one cut");
 
         // The Cut event must carry the measured fill, not the request.
@@ -341,7 +369,7 @@ contract DreamcatcherTest is Test {
 
         assertEq(pool.count(), 1, "the order was placed");
         assertEq(bank.size(user, address(pool)), 100e6, "and nothing moved");
-        (,,,, uint16 attempts,,, uint16 cutsLeft,) = dc.watches(user, address(pool));
+        (,,,, uint16 attempts,,, uint16 cutsLeft,,) = dc.watches(user, address(pool));
         assertEq(cutsLeft, 5, "no cut spent on an empty book");
         assertEq(attempts, 1, "but the attempt is recorded");
     }
@@ -369,7 +397,7 @@ contract DreamcatcherTest is Test {
         dc.cut(user, address(pool));
 
         assertEq(bank.size(user, address(pool)), 100e6, "rolled back to where it started");
-        (,,,,,,, uint16 cutsLeft,) = dc.watches(user, address(pool));
+        (,,,,,,, uint16 cutsLeft,,) = dc.watches(user, address(pool));
         assertEq(cutsLeft, 5, "and no cut was spent");
     }
 
@@ -383,7 +411,7 @@ contract DreamcatcherTest is Test {
         dc.cut(user, address(pool));
 
         assertEq(bank.size(user, address(pool)), 100e6, "unwound");
-        (,,,,,,, uint16 cutsLeft,) = dc.watches(user, address(pool));
+        (,,,,,,, uint16 cutsLeft,,) = dc.watches(user, address(pool));
         assertEq(cutsLeft, 5);
     }
 

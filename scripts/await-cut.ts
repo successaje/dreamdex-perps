@@ -9,7 +9,7 @@ import { createPublicClient, createWalletClient, decodeEventLog, formatUnits, ht
 import { privateKeyToAccount } from "viem/accounts";
 import { hideki, PERPS } from "../src/config.js";
 
-const DC = "0xcaff129ec344a98da8c9a4091a239df158cf31a5" as const;
+const DC = "0xd3d0133439c74c7d0ca42d39ae5fed6476ba2314" as const;
 const POOL = "0x4181dd08E73BbCdd1Ba3E615A18f6abD941b94C0" as const;
 const RUNG = ["Healthy", "MarginCall", "PartialLiquidation", "CloseOut"] as const;
 

@@ -113,6 +113,15 @@ contract Dreamcatcher is SomniaEventHandler {
         /// How many more cuts this watch may make. A bounded number of actions
         /// is a bound a user can actually reason about.
         uint16 cutsLeft;
+        /**
+         *  How many it was armed with.
+         *
+         *  Storing only `cutsLeft` made "how many have been spent" unanswerable
+         *  from chain state, so the UI guessed from browser storage and reported
+         *  "3 of 3, none spent" for a watch that had already cut. A receipt
+         *  screen must not depend on the device it is opened from.
+         */
+        uint16 armedCuts;
         bool armed;
     }
 
@@ -239,6 +248,7 @@ contract Dreamcatcher is SomniaEventHandler {
             cooldown: cooldown,
             lastCutAt: 0,
             cutsLeft: cuts,
+            armedCuts: cuts,
             armed: true
         });
 
@@ -411,6 +421,12 @@ contract Dreamcatcher is SomniaEventHandler {
                 return;
             }
         }
+    }
+
+    /// Cuts spent, straight from chain state — no client-side bookkeeping.
+    function cutsSpent(address account, address pool) external view returns (uint16) {
+        Watch storage w = watches[account][pool];
+        return w.armedCuts > w.cutsLeft ? w.armedCuts - w.cutsLeft : 0;
     }
 
     function rosterLength(address pool) external view returns (uint256) {

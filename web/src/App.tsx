@@ -213,7 +213,6 @@ function Watching({ account, readOnly }: { account: `0x${string}`; readOnly?: bo
           account={account}
           market={market}
           watch={watch}
-          armedCuts={rememberedCuts(account, market.pool)}
           onChanged={watch.refresh}
           readOnly={readOnly}
         />
@@ -233,10 +232,7 @@ function Watching({ account, readOnly }: { account: `0x${string}`; readOnly?: bo
               account={account}
               market={market}
               granted={watch.granted}
-              onDone={() => {
-                rememberCuts(account, market.pool, 0); // reset; re-set on a successful arm
-                void watch.refresh();
-              }}
+              onDone={() => void watch.refresh()}
             />
             )}
           </div>
@@ -268,37 +264,9 @@ function Watching({ account, readOnly }: { account: `0x${string}`; readOnly?: bo
   );
 }
 
-/**
- *  The contract stores cuts REMAINING, not the number originally armed, so the
- *  hoop cannot know how many strands a web started with. That total is a
- *  per-viewer convenience, so it lives in localStorage and degrades to "all
- *  remaining strands are the total" when it is missing — on another device, in
- *  a private window, or with site data cleared.
- */
-function cutsKey(account: string, pool: string) {
-  return `dreamcatcher:cuts:${account.toLowerCase()}:${pool.toLowerCase()}`;
-}
-function rememberCuts(account: string, pool: string, cuts: number) {
-  try { localStorage.setItem(cutsKey(account, pool), String(cuts)); } catch { /* unavailable */ }
-}
-/**
- *  Returns null when the armed total is genuinely unknown.
- *
- *  It used to fall back to `cutsLeft`, which reads as "3 of 3, none spent" for
- *  a watch that has already cut — a fabricated denominator on the one screen
- *  that is supposed to be evidence. The contract stores cuts REMAINING, so on
- *  another device, in a private window, or for a watch armed outside this app,
- *  the total is not recoverable and the UI should say so.
- */
-function rememberedCuts(account: string, pool: string): number | null {
-  try {
-    const v = Number(localStorage.getItem(cutsKey(account, pool)));
-    return Number.isFinite(v) && v > 0 ? v : null;
-  } catch { return null; }
-}
-
 /* -------------------------------------------------------------------- bits */
 
+/** The hoop, small enough for a header: a ring and a few woven chords. */
 function Mark() {
   return (
     <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true">

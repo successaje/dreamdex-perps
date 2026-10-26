@@ -16,6 +16,11 @@ Built for the [dreamDEX Perps Builder Bounty](https://dorahacks.io/hackathon/dre
 
 ---
 
+**Try it without installing anything:**
+[dreamcatcher-beige.vercel.app](https://dreamcatcher-beige.vercel.app) — and the
+live watch this README documents, read-only, no wallet required:
+[`?watch=0x60eF…8E87`](https://dreamcatcher-beige.vercel.app/?watch=0x60eF148485C2a5119fa52CA13c52E9fd98F28e87)
+
 ## Live on Somnia Hideki (Tokyo) testnet
 
 ```
@@ -192,3 +197,36 @@ it, refused on economics with it.
 
 One file per issue in `feedback/`, in the format the bounty specifies. Security
 issues are not filed here — those go privately to security@dreamdex.io.
+
+## X posts
+
+<!-- Replace each line with the real link once posted. Each must tag @DreamDEXSomnia. -->
+
+- _(post 1 — the problem and what Dreamcatcher does)_
+- _(post 2 — the filled cut, with the transaction)_
+- _(post 3 — the permission model, optional)_
+
+## Limitations
+
+Stated here rather than discovered later.
+
+- **Reactivity is deployed but dormant.** `onEvent`, `subscribePool` and
+  `rosterLength` are on chain, but **no subscription has been created**, so no
+  callback has ever fired. Execution today is the permissionless `cut`, which
+  anyone can call. A subscription needs 32 native tokens parked in the contract.
+- **A reactive callback sweeps at most three accounts**, from the front of the
+  roster, with no rotation. At ~3.2M gas per margin-status read that is roughly
+  what a handler budget allows; `cut` covers whoever a sweep misses. Multi-user
+  reactive coverage is **not** demonstrated.
+- **Non-increase comes from atomicity, not from a venue flag.** `placeOrderFor`
+  has no reduce-only option. Execution is immediate-or-cancel with the quantity
+  capped at the live position, and `deliver` re-reads afterwards and unwinds if
+  the account ended up larger or flipped. The venue does enforce reduce-only on
+  its **stop** path, but that path rejects delegated creation outright
+  (`InvalidOrderOwner()`), which is tested in `StopDelegation.fork.t.sol`.
+- **Revoking does not reach into the book.** No order of ours rests long enough
+  to matter, because every order is IOC — but that is a property of how we
+  execute, not a promise about cancellation.
+- **One market, one account, testnet only.** Nothing here has run on mainnet,
+  and the account-level margin trigger is not a position-specific liquidation
+  prediction.

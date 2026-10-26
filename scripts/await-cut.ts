@@ -25,7 +25,8 @@ const bankAbi = parseAbi([
 const dcAbi = parseAbi([
   "function cut(address account, address pool)",
   "function quote(address account, address pool) view returns (bool,bool,uint256,uint8,string)",
-  "function watches(address,address) view returns (uint256,uint16,uint128,uint8,uint16,uint32,uint64,uint16,bool)",
+  "function watches(address,address) view returns (uint256,uint16,uint128,uint8,uint16,uint32,uint64,uint16 cutsLeft,uint16 armedCuts,bool armed)",
+  "function cutsSpent(address,address) view returns (uint16)",
   "event Cut(address indexed account, address indexed pool, bool isBid, uint256 requested, uint256 filled, uint256 limitPrice, uint8 statusBefore, uint16 cutsLeft)",
   "event CutNoFill(address indexed account, address indexed pool, uint256 requested, uint16 attempts)",
   "event CutSkipped(address indexed account, address indexed pool, string reason)",
@@ -70,7 +71,8 @@ while (Date.now() < DEADLINE) {
     console.log(`\nposition  ${formatUnits(before, 8)} -> ${formatUnits(after, 8)} BTC`);
     console.log(`reduced   ${formatUnits(before - after, 8)} BTC`);
     const w = await read<readonly unknown[]>("watches", [account.address, POOL], DC, dcAbi);
-    console.log(`cutsLeft  ${w[7]}   attempts ${w[4]}`);
+    const spent = await read<number>("cutsSpent", [account.address, POOL], DC, dcAbi);
+    console.log(`cutsLeft  ${w[7]} of ${w[8]}   cutsSpent ${spent} (from chain)   attempts ${w[4]}`);
     process.exit(0);
   }
   await new Promise((r) => setTimeout(r, 4_000));

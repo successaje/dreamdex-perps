@@ -26,33 +26,41 @@ execution      immediate-or-cancel only, enforced by the contract
 explorer       https://explorer.testnet.somnia.network/tokyo/address/0xd3d0133439c74c7d0ca42d39ae5fed6476ba2314
 ```
 
-A real position, a real watch, and a **real filled reduction**, in order:
+A real position, a real watch, and a **real filled reduction** — all against the
+contract address above, with before and after read at the block either side.
 
 - **Margin deposited** — [`0x4e972770…`](https://explorer.testnet.somnia.network/tokyo/tx/0x4e9727702fd304679915e4e2a64fa2810722eff47caff56ab98dd035dd17e685)
 - **Position opened** — [`0xac422e3e…`](https://explorer.testnet.somnia.network/tokyo/tx/0xac422e3e2a132491b21686bd9dba951c5029bdb7bb5c403ac78eb527990e0b08) · 0.002 BTC long at 81,858
-- **Size increased to the margin edge** — [`0x4a2db694…`](https://explorer.testnet.somnia.network/tokyo/tx/0x4a2db694aca9e5d12e8465cf48b8bfc969581660efde99376a175b90aa518dc3) · 0.00312 BTC, equity 13.36 against an initial-margin requirement of 12.68
-- **Headroom withdrawn** — [`0x07c4b571…`](https://explorer.testnet.somnia.network/tokyo/tx/0x07c4b5714c0a2326cc439d2bbf2d0846b0780f04e8c6d6b5d13680bd75d20089) · 0.7 USDso out, leaving 0.0376 of headroom
-- **Permission granted** — [`0x3d0aee04…`](https://explorer.testnet.somnia.network/tokyo/tx/0x3d0aee0448cc030f15aebea6fcd6ecbddc4bb070323c546fbe5d44f3d7f59702) · `placeOrderFor`, BTC only
-- **Watch armed** — [`0xe9efcd60…`](https://explorer.testnet.somnia.network/tokyo/tx/0xe9efcd60358b64e3252fd7f47b1b96bc7c9aedfb742b3da6cedc686c52d8596c) · cut 25% at margin call, never sell below 70,000
+- **Size raised to the margin edge** — [`0x4a2db694…`](https://explorer.testnet.somnia.network/tokyo/tx/0x4a2db694aca9e5d12e8465cf48b8bfc969581660efde99376a175b90aa518dc3)
+- **Permission granted** — [`0xea24791c…`](https://explorer.testnet.somnia.network/tokyo/tx/0xea24791cbe7886238001070790e3ffde568c62d1f45b361ce25e9897b6fe42c6) · `placeOrderFor`, BTC only
+- **Watch armed** — [`0x7c33fbe3…`](https://explorer.testnet.somnia.network/tokyo/tx/0x7c33fbe35490617fb526cda673451f7ccfdd419e96f72beb6a9e90dd62d5a302) · cut 25% at margin call, never sell below 70,000
 
-Then the market moved, the account crossed into **MarginCall**, and the cut fired:
+The market then moved against the position overnight, it crossed into
+**MarginCall**, and the watch cut it:
 
-- **The cut** — [`0x347affab…`](https://explorer.testnet.somnia.network/tokyo/tx/0x347affab2aa4667126673adfc3f32df7e3c1b66b72c8a426c31414b98abbbb34)
+- **The cut** — [`0xd9d65bb2…`](https://explorer.testnet.somnia.network/tokyo/tx/0xd9d65bb2cf4f1fe518af5f8754df341f28ade19b85d5022a41d9088521c2b2bc) · block 33,475,358
 
 ```
-Cut  isBid=false  requested=78000  filled=78000  statusBefore=1  cutsLeft=3
-position  0.00312 -> 0.00234 BTC      reduced 0.00078
-cutsLeft  3        attempts 1
+Cut  isBid=false  requested=58000  filled=58000  statusBefore=1  cutsLeft=3
+
+position @ 33475357   0.00234 BTC      (before)
+position @ 33475358   0.00176 BTC      (after)
+reduced               0.00058 BTC
+
+cutsSpent   1     read from the contract, not from a browser
+attempts    1
 ```
 
-Read that against the four claims it settles. The order **sold** to reduce a
-long. It was placed at **margin call**, not before. `filled` is measured from
-the position on both sides of the call, not copied from the request. And the
-budget moved by one cut because something actually reduced — a zero-fill would
-have spent an attempt and nothing else.
+Read that against the claims it settles. The order **sold** to reduce a long —
+direction derived from the sign of a live position, never passed in. It fired at
+**MarginCall**, not before. `filled` is **measured** from the position on both
+sides of the call rather than copied from the request. `cutsSpent` is answerable
+**from chain state**, so the receipt reads the same on any device. And a
+zero-fill would have spent an attempt and nothing else.
 
-Earlier cuts on healthy positions correctly did nothing and are recorded as
-`CutSkipped "above trigger"`.
+Before that, with the account healthy, repeated `cut()` calls correctly did
+nothing and are recorded as `CutSkipped "above trigger"` — a watch that is awake
+and declining to act, which is most of what a protective tool does.
 
 ## Who it is for
 

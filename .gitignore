@@ -4,3 +4,6 @@ node_modules/
 contracts/out/
 contracts/cache/
 contracts/broadcast/
+
+# Internal submission notes - drafts and checklist, not part of the build.
+SUBMISSION.md

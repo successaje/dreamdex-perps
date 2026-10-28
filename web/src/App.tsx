@@ -296,6 +296,7 @@ function Watching({ account, readOnly, tab }: { account: `0x${string}`; readOnly
               account={account}
               market={market}
               granted={watch.granted}
+              size={watch.size}
               onDone={() => void watch.refresh()}
             />
             )}

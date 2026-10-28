@@ -26,13 +26,27 @@ export interface WatchState {
   size: bigint;
   loading: boolean;
   error: string | null;
+  /**
+   *  When this reading was taken, and whether it is still trustworthy.
+   *
+   *  A failed poll keeps the LAST state rather than blanking the screen — but
+   *  silently showing an old "Healthy" after the RPC died is the dangerous
+   *  version of that. The age travels with the data so the UI can say how old
+   *  it is instead of implying it is current.
+   */
+  asOf: number | null;
+  stale: boolean;
 }
 
 const EMPTY: WatchState = {
   armed: false, limitPrice: 0n, reduceBps: 0, lotSize: 0n, triggerStatus: 0,
   cooldown: 0, cutsLeft: 0, attempts: 0, armedCuts: 0, granted: false, wouldCut: false, isBid: false,
   quantity: 0n, status: 0, blockedBy: "", size: 0n, loading: true, error: null,
+  asOf: null, stale: false,
 };
+
+/** A reading older than this is called out rather than shown as current. */
+const STALE_AFTER_MS = 30_000;
 
 /**
  *  Everything the watch screen shows, read from chain every few seconds.
@@ -80,9 +94,16 @@ export function useWatch(account: `0x${string}` | null, pool: `0x${string}` | nu
         wouldCut: q[0], isBid: q[1], quantity: q[2], status: q[3], blockedBy: q[4],
         size: size[0],
         loading: false, error: null,
+        asOf: Date.now(), stale: false,
       });
     } catch (err) {
-      setState((s) => ({ ...s, loading: false, error: (err as Error)?.message ?? "Could not read the watch" }));
+      // Keep what we had, but stop presenting it as current.
+      setState((s) => ({
+        ...s,
+        loading: false,
+        error: (err as Error)?.message ?? "Could not read the watch",
+        stale: s.asOf !== null,
+      }));
     }
   }, [account, pool]);
 
@@ -92,5 +113,14 @@ export function useWatch(account: `0x${string}` | null, pool: `0x${string}` | nu
     return () => clearInterval(t);
   }, [refresh]);
 
-  return { ...state, refresh };
+  // Age the reading even when nothing throws — a poll that never returns is
+  // indistinguishable from one that failed, from the screen's point of view.
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => tick((n) => n + 1), 5_000);
+    return () => clearInterval(t);
+  }, []);
+  const stale = state.stale || (state.asOf !== null && Date.now() - state.asOf > STALE_AFTER_MS);
+
+  return { ...state, stale, refresh };
 }

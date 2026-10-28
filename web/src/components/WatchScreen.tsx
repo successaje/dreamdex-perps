@@ -61,6 +61,25 @@ export function WatchScreen({
 
   return (
     <>
+      {/* Never let an old reading pass as current - a dead RPC otherwise
+          renders as a healthy account, which is the one lie this screen
+          cannot afford. */}
+      {watch.stale && (
+        <div className="strip stale">
+          <span className="strip-icon" aria-hidden="true">◴</span>
+          <div className="strip-text">
+            <b>Showing the last known reading</b>
+            <span>
+              {watch.asOf
+                ? `Taken ${Math.round((Date.now() - watch.asOf) / 1000)}s ago. The chain has not answered since.`
+                : "The chain has not answered."}
+              {" "}Status, position and the quote below may all have moved.
+            </span>
+          </div>
+          <button className="cta ghost" onClick={onChanged}>Retry</button>
+        </div>
+      )}
+
       <div className="market-bar">
         <span className="market-name">{market.symbol} / {market.quoteSymbol}</span>
         <span className={`side ${long ? "long" : "short"}`}>{magnitude === 0n ? "Flat" : long ? "Long" : "Short"}</span>

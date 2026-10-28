@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { Review, type Draft } from "./Review";
 import { formatUnits, parseUnits } from "viem";
 import type { PerpMarket } from "../lib/useMarkets";
-import { DREAMCATCHER, OPERATOR_REGISTRY, walletClient, publicClient } from "../lib/chain";
+import { DREAMCATCHER, OPERATOR_REGISTRY, hideki, walletClient, publicClient } from "../lib/chain";
 import { dreamcatcherAbi, operatorRegistryAbi, PLACE_ORDER_FOR } from "../lib/abi";
 
 /**
@@ -13,11 +14,13 @@ import { dreamcatcherAbi, operatorRegistryAbi, PLACE_ORDER_FOR } from "../lib/ab
  *  the wrong kind of convenient.
  */
 export function ArmForm({
-  account, market, granted, onDone,
+  account, market, granted, size, onDone,
 }: {
   account: `0x${string}`;
   market: PerpMarket;
   granted: boolean;
+  /** The live position, so the review can show the rules in real units. */
+  size: bigint;
   onDone: () => void;
 }) {
   const [limit, setLimit] = useState("");
@@ -27,6 +30,28 @@ export function ArmForm({
   const [cooldown, setCooldown] = useState(300);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [step, setStep] = useState<"rules" | "review">("rules");
+
+  // A draft survives a reload, scoped to this account, market and chain so it
+  // can never be restored against the wrong one.
+  const draftKey = `dreamcatcher:draft:${hideki.id}:${account.toLowerCase()}:${market.pool.toLowerCase()}`;
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (!raw) return;
+      const d = JSON.parse(raw) as Partial<Draft>;
+      if (typeof d.limitPrice === "string") setLimit(d.limitPrice);
+      if (typeof d.reducePct === "number") setReducePct(d.reducePct);
+      if (typeof d.trigger === "number") setTrigger(d.trigger);
+      if (typeof d.cuts === "number") setCuts(d.cuts);
+      if (typeof d.cooldown === "number") setCooldown(d.cooldown);
+    } catch { /* unavailable, or malformed - start fresh */ }
+  }, [draftKey]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(draftKey, JSON.stringify({ limitPrice: limit, reducePct, trigger, cuts, cooldown }));
+    } catch { /* private window, or storage disabled */ }
+  });
 
   const limitOk = limit.trim() !== "" && Number(limit) > 0;
 
@@ -71,6 +96,25 @@ export function ArmForm({
     } finally { setBusy(null); }
   }
 
+  async function confirm() {
+    if (!granted) { await grant(); if (!granted) { /* the refresh will flip it */ } }
+    await arm();
+  }
+
+  if (step === "review") {
+    return (
+      <Review
+        market={market}
+        draft={{ limitPrice: limit, reducePct, trigger, cuts, cooldown }}
+        granted={granted}
+        size={size}
+        busy={busy}
+        onBack={() => setStep("rules")}
+        onConfirm={confirm}
+      />
+    );
+  }
+
   return (
     <section className="card">
       <h2>String a web over {market.symbol}</h2>
@@ -78,13 +122,6 @@ export function ArmForm({
         Two transactions. The first is dreamDEX's own permission, scoped to this one
         market and one function. It is also the off switch.
       </p>
-
-      <div className="field">
-        <span className="label">1 · permission</span>
-        <button className="cta ghost" onClick={grant} disabled={granted || busy !== null}>
-          {granted ? "Granted ✓" : busy === "Granting…" ? "Check your wallet…" : `Grant placeOrderFor on ${market.symbol}`}
-        </button>
-      </div>
 
       <div className="field">
         <span className="label">2 · limit price — the worst price a cut may take</span>
@@ -136,8 +173,8 @@ export function ArmForm({
 
       {error && <p className="sub" style={{ color: "var(--sell)", marginTop: 10 }}>{error}</p>}
 
-      <button className="cta" onClick={arm} disabled={!granted || !limitOk || busy !== null}>
-        {busy === "Arming…" ? "Check your wallet…" : !granted ? "Grant permission first" : "String the web"}
+      <button className="cta" onClick={() => setStep("review")} disabled={!limitOk || busy !== null}>
+        Review before signing
       </button>
     </section>
   );

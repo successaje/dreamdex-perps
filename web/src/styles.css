@@ -137,13 +137,14 @@ h2 { font-size: 16px; font-weight: 600; }
 
 /* ---------------------------------------------------------------- hoop */
 
-.hoop-wrap { display: grid; place-items: center; padding: 6px 0 2px; }
+.hoop-wrap { display: grid; place-items: center; padding: 2px 0 0; }
 .hoop { width: 100%; max-width: 340px; height: auto; display: block; }
 
 .hoop-status {
   text-align: center;
-  margin-top: -6px;
+  margin-top: -2px;
 }
+.hoop-status .note { max-width: 34ch; margin: 2px auto 0; }
 .hoop-status .rung {
   font-family: var(--display);
   font-size: 23px;
@@ -205,6 +206,15 @@ h2 { font-size: 16px; font-weight: 600; }
   cursor: pointer;
   transition: background 0.15s ease, transform 0.08s ease;
 }
+/* Anchors styled as buttons need these explicitly: a link keeps its underline
+   and its inline box however much padding the class adds. */
+a.cta {
+  display: block;
+  text-align: center;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+
 .cta:hover { background: var(--action); }
 .cta:active { transform: translateY(1px); }
 .cta:disabled { background: var(--raised); color: var(--subtle); cursor: not-allowed; }

@@ -61,6 +61,11 @@ export default function App() {
 
 /* ------------------------------------------------------------------ landing */
 
+/** The watch this README documents — a real armed position with a real cut.
+ *  Linked from the landing so a reviewer can see the product working without
+ *  installing a wallet, which is how most of them will arrive. */
+const LIVE_WATCH = "0x60eF148485C2a5119fa52CA13c52E9fd98F28e87";
+
 function Landing() {
   const venue = useVenue();
 
@@ -113,11 +118,17 @@ function Landing() {
       <div className="col">
         <section className="card">
           <div className="hoop-wrap">
-            <Hoop status={0} cutsMade={0} cutsTotal={0} dormant centre="—" centreLabel="no watch" />
+            <Hoop status={0} cutsMade={1} cutsTotal={4} dormant centre="0.00176" centreLabel="btc long" />
           </div>
           <div className="hoop-status">
-            <div className="rung" style={{ color: "var(--subtle)" }}>Nothing watched</div>
-            <div className="note">Connect a wallet to string the web.</div>
+            <div className="rung" style={{ color: "var(--subtle)" }}>A web, at rest</div>
+            <div className="note">
+              The ring is the position. The web tightens as margin degrades, and a cut
+              leaves a strand severed — one is, here.
+            </div>
+            <a className="cta ghost" style={{ marginTop: 14 }} href={`?watch=${LIVE_WATCH}`}>
+              Open the live one
+            </a>
           </div>
         </section>
 
@@ -149,21 +160,44 @@ function Landing() {
 
 function WalletCta() {
   const wallet = useWallet();
+
+  // There is ALWAYS something to click. Before this, a visitor without an
+  // injected wallet got a sentence explaining they could not proceed and no
+  // control at all — on the page most reviewers open first, on a phone.
+  const watch = (
+    <a className="cta ghost" href={`?watch=${LIVE_WATCH}`}>
+      Watch a live position
+    </a>
+  );
+
   if (!wallet.available) {
     return (
-      <p className="sub" style={{ marginTop: 16, color: "var(--subtle)" }}>
-        No wallet detected here. Open this in a browser with MetaMask and it will add{" "}
-        {hideki.name} for you.
-      </p>
+      <div className="lp-cta">
+        {watch}
+        <p className="sub" style={{ fontSize: 12.5, marginTop: 2 }}>
+          No wallet here — the watch above needs none. To arm your own, open this in a
+          browser with MetaMask and it will add {hideki.name} for you.
+        </p>
+      </div>
     );
   }
+
   if (wallet.account && !wallet.onRightChain) {
-    return <button className="cta" onClick={wallet.switchChain}>Switch to {hideki.name}</button>;
+    return (
+      <div className="lp-cta">
+        <button className="cta" onClick={wallet.switchChain}>Switch to {hideki.name}</button>
+        {watch}
+      </div>
+    );
   }
+
   return (
-    <button className="cta" onClick={wallet.connect} disabled={wallet.connecting}>
-      {wallet.connecting ? "Check your wallet…" : "String a web"}
-    </button>
+    <div className="lp-cta">
+      <button className="cta" onClick={wallet.connect} disabled={wallet.connecting}>
+        {wallet.connecting ? "Check your wallet…" : "String a web"}
+      </button>
+      {watch}
+    </div>
   );
 }
 

@@ -3,173 +3,118 @@ import { useMemo } from "react";
 /**
  *  The dreamcatcher.
  *
- *  A real dreamcatcher is a hoop with a woven web that catches what is falling
- *  before it reaches the sleeper. Here the web IS the margin: it hangs loose
- *  while the position is healthy and draws tighter as the account descends
- *  dreamDEX's ladder, and a strand that has already been cut stays visibly
- *  severed so the user can see what the watch spent on their behalf.
+ *  A star-polygon weave: N points on a ring, each joined to the point k ahead,
+ *  which lays a dense lattice rather than a drawn circle. The ring is the
+ *  position; the weave tightens and warms as the account descends dreamDEX's
+ *  ladder, and a strand already cut stays visibly severed.
  *
- *  Everything is derived from one number. Nothing here is decoration that does
- *  not mean something.
+ *  Everything is derived from the margin rung and the cuts spent. Nothing here
+ *  is decoration that does not mean something.
  */
 
 const RUNGS = ["Healthy", "Margin call", "Partial liquidation", "Close out"] as const;
-const RUNG_COLOR = ["#00fa89", "#f0b429", "#f5731f", "#dc0b4a"] as const;
+const RUNG_COLOR = ["#7a7af0", "#f0bd66", "#f5731f", "#ff7c85"] as const;
 
 export interface HoopProps {
   /** 0 Healthy · 1 MarginCall · 2 PartialLiquidation · 3 CloseOut */
   status: number;
-  /** Strands already cut, drawn severed. */
   cutsMade: number;
-  /** Total strands the watch may ever cut. */
   cutsTotal: number;
-  /** Centre line — the position, or whatever the screen is about. */
   centre?: string;
   centreLabel?: string;
-  /** Dim everything: no watch is armed, so the web is hanging loose. */
+  /** No watch armed: the weave hangs loose and pale. */
   dormant?: boolean;
 }
 
 const SIZE = 320;
 const C = SIZE / 2;
-const R = 118;
-const SPOKES = 12;
-
-/** Classic woven web: each ring is built from the midpoints of the chords of
- *  the ring outside it, pulled inward. Tension decides how far inward. */
-function weave(tension: number) {
-  const rings: Array<Array<[number, number]>> = [];
-  let pts: Array<[number, number]> = [];
-  for (let i = 0; i < SPOKES; i++) {
-    const a = (i / SPOKES) * Math.PI * 2 - Math.PI / 2;
-    pts.push([C + R * Math.cos(a), C + R * Math.sin(a)]);
-  }
-  rings.push(pts);
-
-  // A tight web pulls each successive ring harder toward the centre.
-  const pull = 0.62 - tension * 0.17;
-  for (let ring = 0; ring < 4; ring++) {
-    const next: Array<[number, number]> = [];
-    for (let i = 0; i < pts.length; i++) {
-      const [x1, y1] = pts[i];
-      const [x2, y2] = pts[(i + 1) % pts.length];
-      const mx = (x1 + x2) / 2;
-      const my = (y1 + y2) / 2;
-      next.push([C + (mx - C) * (1 - (1 - pull)), C + (my - C) * (1 - (1 - pull))]);
-    }
-    rings.push(next);
-    pts = next;
-  }
-  return rings;
-}
+const POINTS = 48;
 
 export function Hoop({ status, cutsMade, cutsTotal, centre, centreLabel, dormant }: HoopProps) {
   const rung = Math.max(0, Math.min(3, status));
-  const colour = dormant ? "#6e6eed" : RUNG_COLOR[rung];
-  // Healthy hangs loose; each rung down draws the web in.
+  const colour = RUNG_COLOR[rung];
+
+  // A tighter weave as the account descends: the lattice pulls inward and the
+  // chords reach further around the ring.
   const tension = dormant ? 0 : rung / 3;
+  const outer = 128;
+  const inner = outer - 18 - tension * 10;
+  const skip = 17 + Math.round(tension * 2);
 
-  const rings = useMemo(() => weave(tension), [tension]);
+  const chords = useMemo(() => {
+    const pts = (r: number) =>
+      Array.from({ length: POINTS }, (_, i) => {
+        const a = (i / POINTS) * Math.PI * 2 - Math.PI / 2;
+        return [C + r * Math.cos(a), C + r * Math.sin(a)] as const;
+      });
+    const o = pts(outer);
+    const n = pts(inner);
+    return Array.from({ length: POINTS }, (_, i) => ({
+      i,
+      from: o[i],
+      to: n[(i + skip) % POINTS],
+    }));
+  }, [inner, skip]);
 
-  // Which spokes read as severed. Spread them around the hoop rather than
-  // clustering, so a half-spent budget looks half-spent.
+  // Which strands read as severed, spread around the ring so a half-spent
+  // budget looks half-spent rather than clustered.
   const severed = useMemo(() => {
     const s = new Set<number>();
     if (cutsTotal <= 0) return s;
-    for (let i = 0; i < Math.min(cutsMade, SPOKES); i++) {
-      s.add(Math.round((i * SPOKES) / Math.max(1, Math.min(cutsTotal, SPOKES))) % SPOKES);
+    for (let i = 0; i < Math.min(cutsMade, cutsTotal); i++) {
+      const at = Math.round((i * POINTS) / cutsTotal);
+      for (let d = -1; d <= 1; d++) s.add((at + d + POINTS) % POINTS);
     }
     return s;
   }, [cutsMade, cutsTotal]);
 
   return (
-    <svg className="hoop" viewBox={`0 0 ${SIZE} ${SIZE + 52}`} role="img"
-         aria-label={`Margin ${RUNGS[rung]}, ${cutsMade} of ${cutsTotal} strands cut`}>
+    <svg
+      className="hoop"
+      viewBox={`0 0 ${SIZE} ${SIZE}`}
+      role="img"
+      aria-label={`Margin ${RUNGS[rung]}, ${cutsMade} of ${cutsTotal} strands cut`}
+    >
       <defs>
-        <radialGradient id="glow" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor={colour} stopOpacity={dormant ? 0.12 : 0.18} />
-          <stop offset="70%" stopColor={colour} stopOpacity="0" />
+        <radialGradient id="hoopGlow" cx="50%" cy="50%" r="50%">
+          <stop offset="55%" stopColor={colour} stopOpacity="0" />
+          <stop offset="100%" stopColor={colour} stopOpacity={dormant ? 0.06 : 0.13} />
         </radialGradient>
-        <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
-          <feGaussianBlur stdDeviation="3.2" />
-        </filter>
       </defs>
 
-      <circle cx={C} cy={C} r={R + 16} fill="url(#glow)" />
+      <circle cx={C} cy={C} r={outer + 6} fill="url(#hoopGlow)" />
 
-      {/* Hanging threads. They sway only when something is actually watching. */}
-      {[-46, 0, 46].map((dx, i) => (
-        <g key={i} opacity={dormant ? 0.5 : 0.7}>
-          <path
-            d={`M ${C + dx} ${C + R - 6} Q ${C + dx + (i - 1) * 6} ${C + R + 22} ${C + dx} ${C + R + 38}`}
-            stroke={colour} strokeOpacity="0.45" strokeWidth="1.1" fill="none"
-          >
-            {!dormant && (
-              <animate attributeName="stroke-opacity" values="0.2;0.55;0.2"
-                       dur={`${3.4 + i * 0.7}s`} repeatCount="indefinite" />
-            )}
-          </path>
-          <circle cx={C + dx} cy={C + R + 40} r="3" fill={colour} fillOpacity="0.75" />
-        </g>
-      ))}
-
-      {/* The web. Outer rings first so inner strands sit on top. */}
-      <g strokeLinecap="round" fill="none">
-        {rings.map((ring, ri) =>
-          ring.map((p, i) => {
-            const q = ring[(i + 1) % ring.length];
-            const cut = ri === 0 && severed.has(i);
-            return (
-              <line
-                key={`${ri}-${i}`}
-                x1={p[0]} y1={p[1]} x2={q[0]} y2={q[1]}
-                stroke={cut ? "#dc0b4a" : colour}
-                strokeOpacity={cut ? 0.22 : (dormant ? 0.34 : 0.42) - ri * 0.05}
-                strokeWidth={cut ? 0.7 : 1.3 - ri * 0.14}
-                strokeDasharray={cut ? "3 6" : undefined}
-              />
-            );
-          }),
-        )}
-
-        {/* Spokes from the hoop inward — the strands that actually get cut. */}
-        {rings[0].map((p, i) => {
-          const inner = rings[2][i % rings[2].length];
+      <g fill="none" strokeLinecap="round">
+        {chords.map(({ i, from, to }) => {
           const cut = severed.has(i);
           return (
             <line
-              key={`spoke-${i}`}
-              x1={p[0]} y1={p[1]} x2={inner[0]} y2={inner[1]}
-              stroke={cut ? "#dc0b4a" : colour}
-              strokeOpacity={cut ? 0.3 : dormant ? 0.26 : 0.3}
-              strokeWidth={cut ? 0.8 : 0.9}
-              strokeDasharray={cut ? "2 7" : undefined}
+              key={i}
+              x1={from[0]} y1={from[1]} x2={to[0]} y2={to[1]}
+              stroke={cut ? "#ff7c85" : colour}
+              strokeOpacity={cut ? 0.16 : dormant ? 0.4 : 0.62}
+              strokeWidth={cut ? 0.6 : 1}
+              strokeDasharray={cut ? "2 6" : undefined}
             />
           );
         })}
       </g>
 
-      {/* The hoop itself. It breathes while a watch is live. */}
-      <circle cx={C} cy={C} r={R} fill="none" stroke={colour}
-              strokeOpacity={dormant ? 0.55 : 0.9} strokeWidth="2.4" />
-      <circle cx={C} cy={C} r={R} fill="none" stroke={colour}
-              strokeOpacity={dormant ? 0.08 : 0.3} strokeWidth="6" filter="url(#soft)">
-        {!dormant && (
-          <animate attributeName="stroke-opacity" values="0.18;0.42;0.18" dur="4.2s" repeatCount="indefinite" />
-        )}
-      </circle>
+      {/* The rim, drawn over the weave so the ring reads as one object. */}
+      <circle cx={C} cy={C} r={outer} fill="none" stroke={colour}
+              strokeOpacity={dormant ? 0.22 : 0.4} strokeWidth="1" />
 
       {centre && (
-        <text x={C} y={C - 2} textAnchor="middle"
+        <text x={C} y={C + 4} textAnchor="middle"
               fontFamily="'JetBrains Mono', ui-monospace, monospace"
-              fontSize="27" fontWeight="700" fill="#ffffff">
+              fontSize="34" fontWeight="600" fill="#f4f4f7" letterSpacing="-1">
           {centre}
         </text>
       )}
       {centreLabel && (
-        <text x={C} y={C + 20} textAnchor="middle"
+        <text x={C} y={C + 28} textAnchor="middle"
               fontFamily="'JetBrains Mono', ui-monospace, monospace"
-              fontSize="10" letterSpacing="1.6" fill="#8d98a3">
+              fontSize="11" letterSpacing="2" fill="#8d98a3">
           {centreLabel.toUpperCase()}
         </text>
       )}
@@ -179,3 +124,4 @@ export function Hoop({ status, cutsMade, cutsTotal, centre, centreLabel, dormant
 
 export const rungName = (s: number) => RUNGS[Math.max(0, Math.min(3, s))];
 export const rungColour = (s: number) => RUNG_COLOR[Math.max(0, Math.min(3, s))];
+export const RUNG_LADDER = RUNGS;

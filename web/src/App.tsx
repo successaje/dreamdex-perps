@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Hoop, rungName } from "./components/Hoop";
 import { ArmForm } from "./components/ArmForm";
 import { WatchScreen } from "./components/WatchScreen";
+import { Activity } from "./components/Activity";
 import { useMarkets } from "./lib/useMarkets";
 import { useWatch } from "./lib/useWatch";
 import { useWallet } from "./lib/useWallet";
@@ -15,6 +16,20 @@ import { DREAMCATCHER, hideki } from "./lib/chain";
  *  install a wallet before they can look at it is a bad trade — especially for
  *  anyone reviewing this who will not connect one to a stranger's app.
  */
+type Tab = "watch" | "activity";
+
+function tabParam(): Tab {
+  return new URLSearchParams(window.location.search).get("tab") === "activity" ? "activity" : "watch";
+}
+
+/** Keeps every other parameter, so switching tabs never drops ?watch=. */
+function tabHref(tab: Tab): string {
+  const q = new URLSearchParams(window.location.search);
+  if (tab === "watch") q.delete("tab"); else q.set("tab", tab);
+  const s = q.toString();
+  return s ? `?${s}` : "./";
+}
+
 function watchParam(): `0x${string}` | null {
   const v = new URLSearchParams(window.location.search).get("watch");
   return v && /^0x[0-9a-fA-F]{40}$/.test(v) ? (v as `0x${string}`) : null;
@@ -25,6 +40,7 @@ export default function App() {
   const spectating = watchParam();
   const ready = Boolean(wallet.account) && wallet.onRightChain;
   const viewing = ready ? wallet.account! : spectating;
+  const tab = tabParam();
 
   return (
     <main className="shell">
@@ -36,6 +52,16 @@ export default function App() {
             <small>somnia · dreamdex perps</small>
           </span>
         </div>
+        {viewing && (
+          <nav className="tabs" aria-label="Sections">
+            {(["watch", "activity"] as const).map((t) => (
+              <a key={t} className={`tab${tab === t ? " on" : ""}`} href={tabHref(t)}
+                 aria-current={tab === t ? "page" : undefined}>
+                {t === "watch" ? "Watch" : "Activity"}
+              </a>
+            ))}
+          </nav>
+        )}
         <button className="chip" onClick={ready ? undefined : wallet.connect}>
           <span className={`dot ${ready ? "on" : ""}`} />
           {ready
@@ -48,7 +74,7 @@ export default function App() {
         </button>
       </header>
 
-      {viewing ? <Watching account={viewing} readOnly={!ready} /> : <Landing />}
+      {viewing ? <Watching account={viewing} readOnly={!ready} tab={tab} /> : <Landing />}
 
       <p className="foot">
         Liquidation takes your position at whatever the book offers, plus a penalty.
@@ -205,7 +231,7 @@ function WalletCta() {
 
 /* ----------------------------------------------------------------- watching */
 
-function Watching({ account, readOnly }: { account: `0x${string}`; readOnly?: boolean }) {
+function Watching({ account, readOnly, tab }: { account: `0x${string}`; readOnly?: boolean; tab: "watch" | "activity" }) {
   const { markets, loading, error } = useMarkets();
   const [poolIdx, setPoolIdx] = useState(0);
   const market = markets[poolIdx] ?? null;
@@ -244,7 +270,9 @@ function Watching({ account, readOnly }: { account: `0x${string}`; readOnly?: bo
         </div>
       </section>
 
-      {watch.armed ? (
+      {tab === "activity" ? (
+        <Activity account={account} market={market} watch={watch} />
+      ) : watch.armed ? (
         <WatchScreen
           account={account}
           market={market}

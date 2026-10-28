@@ -378,3 +378,29 @@ a.cta {
   .strip { flex-wrap: wrap; }
   .strip .cta { width: 100%; }
 }
+
+/* ------------------------------------------------------------------ tabs */
+
+.tabs { display: flex; gap: 4px; margin-left: 8px; }
+.tab {
+  font-family: var(--display); font-size: 14px; font-weight: 500;
+  color: var(--muted); text-decoration: none;
+  padding: 7px 14px 9px; border-bottom: 2px solid transparent;
+}
+.tab:hover { color: var(--body); }
+.tab.on { color: var(--heading); border-bottom-color: var(--accent); }
+
+.rows { display: flex; flex-direction: column; }
+.row-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  padding: 12px 0;
+}
+.row-item + .row-item { border-top: 1px solid var(--hairline); }
+.row-item .cta { margin-top: 0; width: auto; padding: 7px 12px; font-size: 12.5px; }
+.row-sub { font-size: 12.5px; color: var(--muted); }
+.row-sub b { color: var(--heading); font-family: var(--mono); }
+
+@media (max-width: 899px) {
+  .tabs { order: 3; width: 100%; margin-left: 0; border-top: 1px solid var(--hairline); padding-top: 4px; }
+  .topbar { flex-wrap: wrap; }
+}

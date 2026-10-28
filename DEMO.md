@@ -1,7 +1,7 @@
 # Demo script
 
-Roughly two minutes. Five beats: the problem, the permission, the no-op, the
-cut, the receipt. Every number on screen is live.
+Roughly two and a half minutes. Six beats: the problem, the permission, the
+no-op, the cut, the receipt, the history. Every number on screen is live.
 
 Two things to have open before recording: the app at
 `https://dreamcatcher-beige.vercel.app/?watch=0x60eF148485C2a5119fa52CA13c52E9fd98F28e87`,
@@ -62,7 +62,7 @@ that trades on a timer.
 > Requested fifty-eight thousand base units. Filled fifty-eight thousand. The
 > position went from 0.00234 to 0.00176, read at the blocks either side."
 
-## 5 · The receipt (1:45–2:05)
+## 5 · The receipt (1:45–2:10)
 
 **On screen:** back to the app — `STRANDS LEFT 3/4`, `CUTS SPENT 1`, `ATTEMPTS 1`.
 
@@ -72,6 +72,25 @@ that trades on a timer.
 > An attempt that fills nothing costs an attempt and the cooldown, never a cut.
 > A submitted order is not a reduction, and the screen does not pretend
 > otherwise."
+
+## 6 · The history (2:10–2:35)
+
+**On screen:** the **Activity** tab.
+
+> "And it is not one lucky transaction. Two reductions, both from the dreamDEX
+> indexer — the earlier one against a previous version of the contract, which is
+> why it is still here.
+>
+> Below them, recent checks. That panel is a live tail, not an archive — Somnia
+> caps log queries at a thousand blocks, which is about ninety seconds, so older
+> checks are gone from there even though their reductions remain above. The
+> screen says so rather than showing one list and implying it is everything."
+
+The empty checks panel is worth showing rather than hiding. A tool that is
+honest about the reach of its own data is making a claim about itself that the
+rest of the demo has to live up to.
+
+---
 
 Close on the limitations if there is time: reactivity is deployed but dormant,
 and execution today is the permissionless path.

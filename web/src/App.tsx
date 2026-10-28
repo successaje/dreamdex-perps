@@ -139,7 +139,9 @@ function Landing() {
             <p className="empty">{venue.loading ? "Reading the indexer…" : "Nothing indexed yet."}</p>
           ) : (
             <div className="feed">
-              {venue.recent.map((e) => (
+              {/* Five, not eight: the feed is supporting evidence, and at eight
+                  rows it made the right column twice the height of the left. */}
+              {venue.recent.slice(0, 5).map((e) => (
                 <div className="ev" key={e.id}>
                   <time>{ago(e.at)}</time>
                   <span className={`tag ${e.kind === "AccountLiquidated" ? "bad" : "skip"}`}>

@@ -83,7 +83,7 @@ export function Hoop({ status, cutsMade, cutsTotal, centre, centreLabel, dormant
   }, [cutsMade, cutsTotal]);
 
   return (
-    <svg className="hoop" viewBox={`0 0 ${SIZE} ${SIZE + 86}`} role="img"
+    <svg className="hoop" viewBox={`0 0 ${SIZE} ${SIZE + 52}`} role="img"
          aria-label={`Margin ${RUNGS[rung]}, ${cutsMade} of ${cutsTotal} strands cut`}>
       <defs>
         <radialGradient id="glow" cx="50%" cy="50%" r="50%">
@@ -101,7 +101,7 @@ export function Hoop({ status, cutsMade, cutsTotal, centre, centreLabel, dormant
       {[-46, 0, 46].map((dx, i) => (
         <g key={i} opacity={dormant ? 0.5 : 0.7}>
           <path
-            d={`M ${C + dx} ${C + R - 6} Q ${C + dx + (i - 1) * 7} ${C + R + 36} ${C + dx} ${C + R + 62}`}
+            d={`M ${C + dx} ${C + R - 6} Q ${C + dx + (i - 1) * 6} ${C + R + 22} ${C + dx} ${C + R + 38}`}
             stroke={colour} strokeOpacity="0.45" strokeWidth="1.1" fill="none"
           >
             {!dormant && (
@@ -109,7 +109,7 @@ export function Hoop({ status, cutsMade, cutsTotal, centre, centreLabel, dormant
                        dur={`${3.4 + i * 0.7}s`} repeatCount="indefinite" />
             )}
           </path>
-          <circle cx={C + dx} cy={C + R + 64} r="3.1" fill={colour} fillOpacity="0.75" />
+          <circle cx={C + dx} cy={C + R + 40} r="3" fill={colour} fillOpacity="0.75" />
         </g>
       ))}
 

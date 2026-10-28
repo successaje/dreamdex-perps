@@ -259,7 +259,9 @@ a.cta {
   .shell { max-width: 960px; }
   .deck { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 16px; align-items: start; }
   .col { display: flex; flex-direction: column; gap: 16px; }
-  .hoop { max-width: 380px; }
+  /* The ring is the hero, but at 380px it alone pushed the card past the fold
+     and left the two columns 509px against 1124px. */
+  .hoop { max-width: 310px; }
 }
 @media (max-width: 899px) {
   .deck, .col { display: flex; flex-direction: column; gap: 16px; }

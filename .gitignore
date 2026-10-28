@@ -7,3 +7,6 @@ contracts/broadcast/
 
 # Internal submission notes - drafts and checklist, not part of the build.
 SUBMISSION.md
+
+# Demo renders - large binaries, rebuilt from the recording.
+demo/

@@ -158,6 +158,30 @@ export function WatchScreen({
         </div>
       </div>
 
+      {/* What the next call would actually do, asked of the contract rather
+          than guessed here. Most of the time the answer is "nothing", and that
+          answer is the product — a watch that declines to act, and says why,
+          is the thing that separates this from a bot trading on a timer. It is
+          also what you want to know before you pay gas to find out. */}
+      <section className={`verdict${watch.wouldCut ? " live" : ""}${watch.stale ? " stale" : ""}`}>
+        <span className="verdict-dot" aria-hidden="true" />
+        <div className="verdict-text">
+          <b>
+            {/* "right now" is a claim about the present, and a stale reading
+                cannot make it. Say when the answer was true instead. */}
+            {watch.wouldCut
+              ? `A check ${watch.stale ? "at the last reading" : "right now"} would ${watch.isBid ? "buy" : "sell"} ${fmtQty(watch.quantity, market.baseDecimals)} ${market.symbol}`
+              : `A check ${watch.stale ? "at the last reading" : "right now"} would do nothing`}
+          </b>
+          <span>
+            {watch.wouldCut
+              ? "Immediate-or-cancel at your limit price. Nothing of yours rests on the book."
+              : <>The contract&rsquo;s own answer: <code>{watch.blockedBy}</code>. Declining to act is the normal state.</>}
+          </span>
+        </div>
+        <span className="verdict-tag">{watch.stale ? "not current" : "quoted from chain"}</span>
+      </section>
+
       {/* Honest about what is actually driving execution. No subscription has
           been created, so nothing fires on its own — and saying otherwise would
           be the single most misleading thing this screen could do. */}

@@ -367,6 +367,40 @@ a.cta {
 .strip-text span { color: var(--muted); font-size: 12.5px; }
 .strip .cta { margin-top: 0; width: auto; padding: 10px 18px; white-space: nowrap; }
 
+/* --------------------------------------------------------------- verdict */
+
+/*  The answer to "what would happen if I pressed the button", read from the
+    contract. Neutral by default, because "nothing" is the honest resting
+    state and should not look like an alarm; it only lights when a cut is
+    actually live. */
+.verdict {
+  display: flex; align-items: center; gap: 14px;
+  border: 1px solid var(--hairline); border-radius: var(--radius-sm);
+  background: var(--surface); padding: 12px 14px; margin-bottom: 10px;
+}
+.verdict-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex: none;
+  background: var(--rung-0); box-shadow: 0 0 10px rgba(0, 250, 137, 0.5);
+}
+.verdict-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.verdict-text b { color: var(--body); font-size: 13.5px; font-weight: 600; }
+.verdict-text span { color: var(--subtle); font-size: 12.5px; }
+.verdict-text code { font-family: var(--mono); font-size: 12px; color: var(--accent-text); }
+.verdict-tag {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--subtle); white-space: nowrap;
+}
+.verdict.stale .verdict-dot { background: var(--subtle); box-shadow: none; }
+.verdict.stale .verdict-text b { color: var(--muted); }
+.verdict.live { border-color: rgba(110, 110, 237, 0.4); background: rgba(110, 110, 237, 0.08); }
+.verdict.live .verdict-dot { background: var(--accent-text); box-shadow: 0 0 10px rgba(163, 156, 255, 0.6); }
+.verdict.live .verdict-text b { color: var(--heading); }
+
+@media (max-width: 899px) {
+  .verdict { flex-wrap: wrap; }
+  .verdict-tag { width: 100%; }
+}
+
 /* --------------------------------------------------------------- receipt */
 
 .receipt-body { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; }

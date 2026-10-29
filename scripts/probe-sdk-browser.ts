@@ -1,6 +1,10 @@
 /**
- *  Isolate why listLiquidations resolves under Node but hangs in a browser.
- *  Times each stage so the report names a stage, not a symptom.
+ *  Times listPerpMarkets and listLiquidations stage by stage under Node.
+ *
+ *  Written to chase a browser hang in listLiquidations. It was not the SDK:
+ *  the cause was a StrictMode double-mount deadlock in our own useVenue hook,
+ *  and the SDK resolves the call in a browser in about 1.5s. Kept as a timing
+ *  harness, not as evidence of an SDK fault.
  */
 import { SomniaMarkets, SOMNIA_HIDEKI_TESTNET_ADDRESSES } from "@somnia-chain/markets-sdk";
 import { hideki, INDEXER_URL, WS_URL } from "../src/config.js";

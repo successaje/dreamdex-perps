@@ -10,3 +10,6 @@ SUBMISSION.md
 
 # Demo renders - large binaries, rebuilt from the recording.
 demo/
+
+# Paste-ready DoraHacks field copy - internal, not part of the build.
+DORAHACKS.md

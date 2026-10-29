@@ -96,9 +96,14 @@ function Landing() {
   const venue = useVenue();
 
   // The headline is the last 24 hours, not a count since arrival. Liquidations
-  // come in bursts: a venue doing several hundred a day can still go twenty
+  // come in bursts: a venue doing over a thousand a day can still go twenty
   // quiet minutes, and a counter sitting at zero argues against the product.
-  const headline = venue.last24h;
+  //
+  // `truncated` means the count hit the ceiling the hook had to guess at, so it
+  // is a floor rather than a total. The `+` is the whole difference between a
+  // measurement and a bound, and this number is at its most misleading when it
+  // looks most exact.
+  const headline = venue.last24h.toLocaleString("en-US") + (venue.truncated ? "+" : "");
 
   return (
     <div className="deck">
@@ -114,12 +119,14 @@ function Landing() {
               {venue.loading ? "—" : headline}
             </span>
             <span style={{ fontSize: 16, fontWeight: 600, color: "var(--muted)" }}>
-              {headline === 1 ? "liquidation" : "liquidations"}
+              {venue.last24h === 1 && !venue.truncated ? "liquidation" : "liquidations"}
             </span>
           </div>
           <p className="num" style={{ fontSize: 12, color: "var(--subtle)", margin: "6px 0 0" }}>
             in the last 24 hours
-            {venue.accounts > 0 && <> · {venue.accounts} accounts caught</>}
+            {venue.accounts > 0 && (
+              <> · {venue.accounts.toLocaleString("en-US")}{venue.truncated ? "+" : ""} accounts caught</>
+            )}
           </p>
 
           <p className="sub" style={{ marginTop: 14 }}>
